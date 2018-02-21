@@ -187,7 +187,7 @@ class Nominal a where
 --  support :: a -> [Name]
   occurs :: Name -> a -> Bool
 --  occurs x v = x `elem` support v
-  act     :: Bool -> a -> Face -> a -- TODO: rename
+  subst   :: a -> Face -> a
   swap    :: a -> (Name,Name) -> a
 
 
@@ -212,32 +212,32 @@ newtype Nameless a = Nameless { unNameless :: a }
 instance Nominal (Nameless a) where
 --  support _ = []
   occurs _ _ = False
-  act _ x _   = x
+  subst x _   = x
   swap x _  = x
 
 instance Nominal () where
 --  support () = []
   occurs _ _ = False
-  act _ () _   = ()
+  subst () _   = ()
   swap () _  = ()
 
 instance (Nominal a, Nominal b) => Nominal (a, b) where
 --  support (a, b) = support a `union` support b
   occurs x (a,b) = occurs x a || occurs x b
-  act x (a,b) f  = (act x a f,act x b f)
+  subst (a,b) f  = (subst a f,subst b f)
   swap (a,b) n   = (swap a n,swap b n)
 
 instance (Nominal a, Nominal b, Nominal c) => Nominal (a, b, c) where
 --  support (a,b,c) = unions [support a, support b, support c]
   occurs x (a,b,c) = or [occurs x a,occurs x b,occurs x c]
-  act x (a,b,c) f = (act x a f,act x b f,act x c f)
+  subst (a,b,c) f = (subst a f,subst b f,subst c f)
   swap (a,b,c) n  = (swap a n,swap b n,swap c n)
 
 instance (Nominal a, Nominal b, Nominal c, Nominal d) =>
          Nominal (a, b, c, d) where
 --  support (a,b,c,d) = unions [support a, support b, support c, support d]
   occurs x (a,b,c,d) = or [occurs x a,occurs x b,occurs x c,occurs x d]
-  act x (a,b,c,d) f = (act x a f,act x b f,act x c f,act x d f)
+  subst (a,b,c,d) f = (subst a f,subst b f,subst c f,subst d f)
   swap (a,b,c,d) n  = (swap a n,swap b n,swap c n,swap d n)
 
 instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e) =>
@@ -246,7 +246,7 @@ instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e) =>
   --   unions [support a, support b, support c, support d, support e]
   occurs x (a,b,c,d,e) =
     or [occurs x a,occurs x b,occurs x c,occurs x d,occurs x e]
-  act x (a,b,c,d,e) f = (act x a f,act x b f,act x c f,act x d f, act x e f)
+  subst (a,b,c,d,e) f = (subst a f,subst b f,subst c f,subst d f, subst e f)
   swap (a,b,c,d,e) n =
     (swap a n,swap b n,swap c n,swap d n,swap e n)
 
@@ -256,20 +256,20 @@ instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e, Nominal h) =>
   --   unions [support a, support b, support c, support d, support e, support h]
   occurs x (a,b,c,d,e,h) =
     or [occurs x a,occurs x b,occurs x c,occurs x d,occurs x e,occurs x h]
-  act x (a,b,c,d,e,h) f = (act x a f,act x b f,act x c f,act x d f, act x e f, act x h f)
+  subst (a,b,c,d,e,h) f = (subst a f,subst b f,subst c f,subst d f, subst e f, subst h f)
   swap (a,b,c,d,e,h) n  =
     (swap a n,swap b n,swap c n,swap d n,swap e n,swap h n)
 
 instance Nominal a => Nominal [a]  where
 --  support xs  = unions (map support xs)
   occurs x xs = any (occurs x) xs
-  act b xs f  = [ act b x f | x <- xs ]
+  subst xs f  = [ subst x f | x <- xs ]
   swap xs n   = [ swap x n | x <- xs ]
 
 instance Nominal a => Nominal (Maybe a)  where
 --  support    = maybe [] support
   occurs x   = maybe False (occurs x)
-  act x v f  = fmap (\y -> act x y f) v
+  subst v f  = fmap (\y -> subst y f) v
   swap a n   = fmap (`swap` n) a
 
 instance Nominal II where
@@ -280,8 +280,8 @@ instance Nominal II where
     Dir _ -> False
     Name i -> x == i
 
-  act _ (Dir b) (i,r)  = Dir b
-  act _ (Name j) (i,r) | i == j    = r
+  subst (Dir b) (i,r)  = Dir b
+  subst (Name j) (i,r) | i == j    = r
                        | otherwise = Name j
 
   swap (Dir b) (i,j)  = Dir b
@@ -292,15 +292,6 @@ instance Nominal II where
 supportII :: II -> [Name]
 supportII (Dir _)        = []
 supportII (Name i)       = [i]
-
--- foldrWithKey (\i d a -> act x a (i,Dir d))
-face :: Nominal a => a -> Face -> a
-face x f = act True x f -- faceloop x (assocs f)
-  -- where
-  -- faceloop x [] = x
-  -- faceloop x ((i,d):xs) -- | not (i `occurs` x) = faceloop x xs
-  --                       -- | otherwise =
-  --                       = faceloop (act True x (i,Dir d)) xs
 
 -- the faces should be incomparable
 data System a = Sys [(Face,a)]
@@ -345,15 +336,15 @@ instance Nominal a => Nominal (System a) where
   occurs x (Sys s) = or [ x == i || occurs x r || occurs x a | ((i,r),a) <- s ]
   occurs x (Triv a) = occurs x a
 
-  act b (Sys []) (i,r) = Sys []
-  act b (Sys (((j,s),a):xs)) (i,r) = case act b (Sys xs) (i,r) of
+  subst (Sys []) (i,r) = Sys []
+  subst (Sys (((j,s),a):xs)) (i,r) = case subst (Sys xs) (i,r) of
     Triv x -> Triv x
-    Sys xs' -> case (act b (Name j) (i,r),act b s (i,r)) of
-      (x,y) | x == y -> Triv (act b a (i,r))             -- if 0=0, 1=1 or i=i then trivial
+    Sys xs' -> case (subst (Name j) (i,r),subst s (i,r)) of
+      (x,y) | x == y -> Triv (subst a (i,r))             -- if 0=0, 1=1 or i=i then trivial
       (Dir _,Dir _) -> Sys xs'                           -- remove 0=1 and 1=0
-      (Dir d,Name x) -> Sys (((x,Dir d),act b a (i,r)) : xs') -- swap direction
-      (Name x,y) -> Sys (((x,y),act b a (i,r)) : xs')    -- good direction                                   
-  act b (Triv a) (i,r) = Triv (act b a (i,r))
+      (Dir d,Name x) -> Sys (((x,Dir d),subst a (i,r)) : xs') -- swap direction
+      (Name x,y) -> Sys (((x,y),subst a (i,r)) : xs')    -- good direction
+  subst (Triv a) (i,r) = Triv (subst a (i,r))
 
   swap (Sys s) ij = Sys [ ((swapName i ij,swap r ij),swap a ij) | ((i,r),a) <- s ]
   swap (Triv a) ij = Triv (swap a ij)
@@ -383,10 +374,10 @@ rename a (i, j) = swap a (i,j)
 -- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us
 proj :: (Nominal a, Show a) => System a -> Face -> a
-proj us alpha = case us `face` alpha of
+proj us ir = case us `subst` ir of
   Triv a -> a
   _ -> error "proj"
-  
+
   --   | eps `member` usalpha = usalpha ! eps
   --   | otherwise            =
   -- error $ "proj: eps not in " ++ show usalpha ++ "\nwhich  is the "
