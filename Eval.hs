@@ -86,9 +86,6 @@ instance Nominal Val where
   --   VUnGlueElem a b ts      -> support (a,b,ts)
   --   VHCompU a ts            -> support (a,ts)
   --   VUnGlueElemU a b es     -> support (a,b,es)
-  --   VIdPair u us            -> support (u,us)
-  --   VId a u v               -> support (a,u,v)
-  --   VIdJ a u c d x p        -> support [a,u,c,d,x,p]
   occurs x v = case v of
     VU                      -> False
     Ter _ e                 -> occurs x e
@@ -114,9 +111,6 @@ instance Nominal Val where
     VUnGlueElem a b ts      -> occurs x (a,b,ts)
     VHCompU a ts            -> occurs x (a,ts)
     VUnGlueElemU a b es     -> occurs x (a,b,es)
-    -- VIdPair u us            -> occurs x (u,us)
-    -- VId a u v               -> occurs x (a,u,v)
-    -- VIdJ a u c d y p        -> occurs x [a,u,c,d,y,p]
 
   act b u (i, phi)
     | b = case u of
@@ -147,10 +141,6 @@ instance Nominal Val where
          VUnGlueElem a bb ts      -> unGlue (act b a (i,phi)) (act b bb (i,phi)) (act b ts (i,phi))
          VUnGlueElemU a bb es     -> unGlueU (act b a (i,phi)) (act b bb (i,phi)) (act b es (i,phi))
          VHCompU a ts            -> hCompUniv (act b a (i,phi)) (act b ts (i,phi))
-         -- VIdPair u us            -> VIdPair (act b u (i,phi)) (act b us (i,phi))
-         -- VId a u v               -> VId (act b a (i,phi)) (act b u (i,phi)) (act b v (i,phi))
-         -- VIdJ a u c d x p        ->
-           -- idJ (act b a (i,phi)) (act b u (i,phi)) (act b c (i,phi)) (act b d (i,phi)) (act b x (i,phi)) (act b p (i,phi))
     | otherwise = case u of
          VU           -> VU
          Ter t e      -> Ter t (act b e (i,phi))
@@ -179,10 +169,6 @@ instance Nominal Val where
          VUnGlueElem a bb ts     -> VUnGlueElem (act b a (i,phi)) (act b bb (i,phi)) (act b ts (i,phi))
          VUnGlueElemU a bb es    -> VUnGlueElemU (act b a (i,phi)) (act b bb (i,phi)) (act b es (i,phi))
          VHCompU a ts            -> VHCompU (act b a (i,phi)) (act b ts (i,phi))
-         -- VIdPair u us            -> VIdPair (act b u (i,phi)) (act b us (i,phi))
-         -- VId a u v               -> VId (act b a (i,phi)) (act b u (i,phi)) (act b v (i,phi))
-         -- VIdJ a u c d x p        ->
-         --   VIdJ (act b a (i,phi)) (act b u (i,phi)) (act b c (i,phi)) (act b d (i,phi)) (act b x (i,phi)) (act b p (i,phi))
 
   -- This increases efficiency as it won't trigger computation.
   swap u ij@(i,j) =
@@ -213,10 +199,6 @@ instance Nominal Val where
          VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
          VUnGlueElemU a b es     -> VUnGlueElemU (sw a) (sw b) (sw es)
          VHCompU a ts            -> VHCompU (sw a) (sw ts)
-         -- VIdPair u us            -> VIdPair (sw u) (sw us)
-         -- VId a u v               -> VId (sw a) (sw u) (sw v)
-         -- VIdJ a u c d x p        ->
-         --   VIdJ (sw a) (sw u) (sw c) (sw d) (sw x) (sw p)
 
 -----------------------------------------------------------------------
 -- The evaluator
@@ -260,10 +242,6 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Glue a ts           -> glue (eval rho a) (evalSystem rho ts)
   GlueElem a ts       -> glueElem (eval rho a) (evalSystem rho ts)
   UnGlueElem v a ts   -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
-  -- Id a r s            -> VId (eval rho a) (eval rho r) (eval rho s)
-  -- IdPair b ts         -> VIdPair (eval rho b) (evalSystem rho ts)
-  -- IdJ a t c d x p     -> idJ (eval rho a) (eval rho t) (eval rho c)
-  --                            (eval rho d) (eval rho x) (eval rho p)
   _                   -> error $ "Cannot evaluate " ++ show v
 
 evals :: Env -> [(Ident,Ter)] -> [(Ident,Val)]
@@ -355,7 +333,6 @@ inferType v = case v of
   VTrans a _ _ -> a @@ One
   VUnGlueElem _ b _  -> b
   VUnGlueElemU _ b _ -> b
-  -- VIdJ _ _ c _ x p -> app (app c x) p
   _ -> error $ "inferType: not neutral " ++ show v
 
 (@@) :: ToFormula a => Val -> a -> Val
@@ -397,7 +374,6 @@ hComp i a u us = case a of
   VPathP p v0 v1 -> let j = fresh (Atom i,a,u,us) in
     VPLam j $ hComp i (p @@ j) (u @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)]
                                          (Map.map (@@ j) us))
-  -- VId b v0 v1 -> undefined
   VSigma a f -> let (us1, us2) = (Map.map fstVal us, Map.map sndVal us)
                     (u1, u2) = (fstVal u, sndVal u)
                     u1fill = hFill i a u1 us1
@@ -508,7 +484,6 @@ trans i a phi u = case a of
   VPathP p v0 v1 -> let j = fresh (Atom i,a,phi,u) in
     VPLam j $ comp i (p @@ j) (u @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)]
                                          (border (u @@ j) (invSystem phi One)))
-  -- VId b v0 v1 -> undefined
   VSigma a f ->
     let (u1,u2) = (fstVal u, sndVal u)
         u1f     = transFill i a phi u1
@@ -591,22 +566,6 @@ squeeze :: Name -> Val -> Formula -> Val -> Val
 squeeze i a phi u = trans j (a `disj` (i,j)) (phi `orFormula` Atom i) u
   where j = fresh (Atom i,a,phi,u)
 
-
--------------------------------------------------------------------------------
--- | Id
-
--- idJ :: Val -> Val -> Val -> Val -> Val -> Val -> Val
--- idJ a v c d x p = case p of
---   VIdPair w ws -> comp i (app (app c (w @@ i)) w') d
---                     (border d (shape ws))
---     where w' = VIdPair (VPLam j $ w @@ (Atom i :/\: Atom j))
---                   (insertSystem (i ~> 0) v ws)
---           i:j:_ = freshs [a,v,c,d,x,p]
---   _ -> VIdJ a v c d x p
-
--- isIdPair :: Val -> Bool
--- isIdPair VIdPair{} = True
--- isIdPair _         = False
 
 
 -------------------------------------------------------------------------------
@@ -859,10 +818,6 @@ instance Convertible Val where
       (VUnGlueElemU u _ _,VUnGlueElemU u' _ _) -> conv ns u u'
       (VUnGlueElem u _ _,VUnGlueElem u' _ _) -> conv ns u u'
       (VHCompU u es,VHCompU u' es')            -> conv ns (u,es) (u',es')
-      -- (VIdPair v vs,VIdPair v' vs')          -> conv ns (v,vs) (v',vs')
-      -- (VId a u v,VId a' u' v')               -> conv ns (a,u,v) (a',u',v')
-      -- (VIdJ a u c d x p,VIdJ a' u' c' d' x' p') ->
-      --   conv ns [a,u,c,d,x,p] [a',u',c',d',x',p']
       _                                      -> False
 
 instance Convertible Ctxt where
@@ -933,10 +888,6 @@ instance Normal Val where
     VSplit u t          -> VSplit (normal ns u) (normal ns t)
     VApp u v            -> VApp (normal ns u) (normal ns v)
     VAppFormula u phi   -> VAppFormula (normal ns u) (normal ns phi)
-    -- VId a u v           -> VId (normal ns a) (normal ns u) (normal ns v)
-    -- VIdPair u us        -> VIdPair (normal ns u) (normal ns us)
-    -- VIdJ a u c d x p    -> VIdJ (normal ns a) (normal ns u) (normal ns c)
-    --                             (normal ns d) (normal ns x) (normal ns p)
     _                   -> v
 
 instance Normal (Nameless a) where
