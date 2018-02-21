@@ -10,7 +10,7 @@ import Text.PrettyPrint as PP
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Connections
+import Cartesian
 
 --------------------------------------------------------------------------------
 -- | Terms

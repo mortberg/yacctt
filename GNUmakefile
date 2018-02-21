@@ -6,7 +6,7 @@
 GHC = ghc
 # or:
 # GHC = cabal exec ghc -- 
-INPUT = CTT.hs Connections.hs Eval.hs Main.hs Resolver.hs TypeChecker.hs
+INPUT = CTT.hs Cartesian.hs Eval.hs Main.hs Resolver.hs TypeChecker.hs
 GRAMMAR = Exp.cf
 GRAMMAR_X_FILES = Exp/Lex.x
 GRAMMAR_Y_FILES = Exp/Par.y

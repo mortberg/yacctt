@@ -1,6 +1,7 @@
+-- Random stuff that we need for Cartesian cubicaltt
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances,
              GeneralizedNewtypeDeriving, TupleSections #-}
-module Connections where
+module Cartesian where
 
 import Control.Applicative
 import Data.List

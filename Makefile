@@ -1,10 +1,10 @@
 # DO NOT DELETE: Beginning of Haskell dependencies
-Connections.o : Connections.hs
+Cartesian.o : Cartesian.hs
 CTT.o : CTT.hs
-CTT.o : Connections.hi
+CTT.o : Cartesian.hi
 Eval.o : Eval.hs
 Eval.o : CTT.hi
-Eval.o : Connections.hi
+Eval.o : Cartesian.hi
 Exp/Abs.o : Exp/Abs.hs
 Exp/ErrM.o : Exp/ErrM.hs
 Exp/Lex.o : Exp/Lex.hs
@@ -28,15 +28,15 @@ Exp/Test.o : Exp/Skel.hi
 Exp/Test.o : Exp/Par.hi
 Exp/Test.o : Exp/Lex.hi
 Resolver.o : Resolver.hs
-Resolver.o : Connections.hi
-Resolver.o : Connections.hi
+Resolver.o : Cartesian.hi
+Resolver.o : Cartesian.hi
 Resolver.o : CTT.hi
 Resolver.o : CTT.hi
 Resolver.o : Exp/Abs.hi
 TypeChecker.o : TypeChecker.hs
 TypeChecker.o : Eval.hi
 TypeChecker.o : CTT.hi
-TypeChecker.o : Connections.hi
+TypeChecker.o : Cartesian.hi
 Main.o : Main.hs
 Main.o : Eval.hi
 Main.o : TypeChecker.hi

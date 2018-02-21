@@ -9,10 +9,8 @@ import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Connections
+import Cartesian
 import CTT
-
-
 
 -----------------------------------------------------------------------
 -- Lookup functions

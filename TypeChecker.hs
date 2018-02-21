@@ -11,7 +11,7 @@ import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey,elems,keys
 import qualified Data.Map as Map
 import qualified Data.Traversable as T
 
-import Connections
+import Cartesian
 import CTT
 import Eval
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE TupleSections #-}
-
 -- | Convert the concrete syntax into the syntax of cubical TT.
 module Resolver where
 
@@ -16,8 +15,8 @@ import qualified Data.Map as Map
 import Exp.Abs
 import CTT (Ter,Ident,Loc(..),mkApps,mkWheres)
 import qualified CTT
-import Connections (negFormula,andFormula,orFormula)
-import qualified Connections as C
+import Cartesian (negFormula,andFormula,orFormula)
+import qualified Cartesian as C
 
 -- | Useful auxiliary functions
 
