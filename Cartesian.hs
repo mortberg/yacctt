@@ -15,12 +15,12 @@ import Data.Maybe
 import Data.IORef
 import System.IO.Unsafe
 
-data Name = Name String
+data Name = N String
           | Gen {-# UNPACK #-} !Int
   deriving (Eq,Ord)
 
 instance Show Name where
-  show (Name i) = i
+  show (N i) = i
   show (Gen x)  = 'i' : show x
 
 swapName :: Name -> (Name,Name) -> Name
@@ -29,6 +29,8 @@ swapName k (i,j) | k == i    = j
                  | otherwise = k
 
 -- | Directions
+
+-- Maybe merge with II?
 data Dir = Zero | One
   deriving (Eq,Ord)
 
@@ -53,134 +55,31 @@ instance Num Dir where
   fromInteger 1 = One
   fromInteger _ = error "fromInteger Dir"
 
--- | Face
+-- | Interval
 
--- Faces of the form: [(i,0),(j,1),(k,0)]
-type Face = Map Name Dir
-
-showFace :: Face -> String
-showFace alpha = concat [ "(" ++ show i ++ " = " ++ show d ++ ")"
-                        | (i,d) <- toList alpha ]
-
-swapFace :: Face -> (Name,Name) -> Face
-swapFace alpha ij = mapKeys (`swapName` ij) alpha
-
--- Check if two faces are compatible
-compatible :: Face -> Face -> Bool
-compatible xs ys = and (elems (intersectionWith (==) xs ys))
-
-compatibles :: [Face] -> Bool
-compatibles []     = True
-compatibles (x:xs) = all (x `compatible`) xs && compatibles xs
-
-allCompatible :: [Face] -> [(Face,Face)]
-allCompatible []     = []
-allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
-
--- Partial composition operation
-meet :: Face -> Face -> Face
-meet = unionWith f
-  where f d1 d2 = if d1 == d2 then d1 else error "meet: incompatible faces"
-
-meetMaybe :: Face -> Face -> Maybe Face
-meetMaybe x y = if compatible x y then Just $ meet x y else Nothing
-
-meets :: [Face] -> [Face] -> [Face]
-meets xs ys = nub [ meet x y | x <- xs, y <- ys, compatible x y ]
-
-meetss :: [[Face]] -> [Face]
-meetss = foldr meets [eps]
-
-leq :: Face -> Face -> Bool
-alpha `leq` beta = meetMaybe alpha beta == Just alpha
-
-comparable :: Face -> Face -> Bool
-comparable alpha beta = alpha `leq` beta || beta `leq` alpha
-
-incomparables :: [Face] -> Bool
-incomparables []     = True
-incomparables (x:xs) = all (not . (x `comparable`)) xs && incomparables xs
-
-(~>) :: Name -> Dir -> Face
-i ~> d = singleton i d
-
-eps :: Face
-eps = Map.empty
-
-minus :: Face -> Face -> Face
-minus alpha beta = alpha Map.\\ beta
-
-
--- | Formulas
-
-data Formula = Dir Dir
-             | Atom Name
-             | NegAtom Name
-             | Formula :/\: Formula
-             | Formula :\/: Formula
+data II = Dir Dir
+        | Name Name
   deriving Eq
 
-instance Show Formula where
-  show (Dir Zero)  = "0"
-  show (Dir One)   = "1"
-  show (NegAtom a) = '-' : show a
-  show (Atom a)    = show a
-  show (a :\/: b)  = show1 a ++ " \\/ " ++ show1 b
-    where show1 v@(a :/\: b) = "(" ++ show v ++ ")"
-          show1 a = show a
-  show (a :/\: b) = show1 a ++ " /\\ " ++ show1 b
-    where show1 v@(a :\/: b) = "(" ++ show v ++ ")"
-          show1 a = show a
+instance Show II where
+  show d = show d
+  -- show (Dir Zero)  = "0"
+  -- show (Dir One)   = "1"
+  -- show (Name a)    = show a
 
-class ToFormula a where
-  toFormula :: a -> Formula
+class ToII a where
+  toII :: a -> II
 
-instance ToFormula Formula where
-  toFormula = id
+instance ToII II where
+  toII = id
 
-instance ToFormula Name where
-  toFormula = Atom
+instance ToII Name where
+  toII = Name
 
-instance ToFormula Dir where
-  toFormula = Dir
+instance ToII Dir where
+  toII = Dir
 
-negFormula :: Formula -> Formula
-negFormula (Dir b)        = Dir (- b)
-negFormula (Atom i)       = NegAtom i
-negFormula (NegAtom i)    = Atom i
-negFormula (phi :/\: psi) = orFormula (negFormula phi) (negFormula psi)
-negFormula (phi :\/: psi) = andFormula (negFormula phi) (negFormula psi)
-
-andFormula :: Formula -> Formula -> Formula
-andFormula (Dir Zero) _  = Dir Zero
-andFormula _ (Dir Zero)  = Dir Zero
-andFormula (Dir One) phi = phi
-andFormula phi (Dir One) = phi
-andFormula phi psi       = phi :/\: psi
-
-orFormula :: Formula -> Formula -> Formula
-orFormula (Dir One) _    = Dir One
-orFormula _ (Dir One)    = Dir One
-orFormula (Dir Zero) phi = phi
-orFormula phi (Dir Zero) = phi
-orFormula phi psi        = phi :\/: psi
-
-dnf :: Formula -> Set (Set (Name,Dir))
-dnf (Dir One)      = Set.singleton Set.empty
-dnf (Dir Zero)     = Set.empty
-dnf (Atom n)       = Set.singleton (Set.singleton (n,1))
-dnf (NegAtom n)    = Set.singleton (Set.singleton (n,0))
-dnf (phi :\/: psi) = dnf phi `merge` dnf psi
-dnf (phi :/\: psi) =
-  foldr merge Set.empty [ Set.singleton (a `Set.union` b)
-                        | a <- Set.toList (dnf phi)
-                        , b <- Set.toList (dnf psi) ]
-
-fromDNF :: Set (Set (Name,Dir)) -> Formula
-fromDNF s = foldr (orFormula . foldr andFormula (Dir One)) (Dir Zero) fs
-  where xss = map Set.toList $ Set.toList s
-        fs = [ [ if d == Zero then NegAtom n else Atom n | (n,d) <- xs ] | xs <- xss ]
-
+-- Probably not needed?
 merge :: Set (Set (Name,Dir)) -> Set (Set (Name,Dir)) -> Set (Set (Name,Dir))
 merge a b =
   let as = Set.toList a
@@ -190,16 +89,70 @@ merge a b =
 
 -- find a better name?
 -- phi b = max {alpha : Face | phi alpha = b}
-invFormula :: Formula -> Dir -> [Face]
-invFormula (Dir b') b          = [ eps | b == b' ]
-invFormula (Atom i) b          = [ singleton i b ]
-invFormula (NegAtom i) b       = [ singleton i (- b) ]
-invFormula (phi :/\: psi) Zero = invFormula phi 0 `union` invFormula psi 0
-invFormula (phi :/\: psi) One  = meets (invFormula phi 1) (invFormula psi 1)
-invFormula (phi :\/: psi) b    = invFormula (negFormula phi :/\: negFormula psi) (- b)
+-- invII :: II -> Dir -> [Face]
+-- invII (Dir b') b       = [ eps | b == b' ]
+-- invII (N i) b          = [ singleton i b ]
 
-propInvFormulaIncomp :: Formula -> Dir -> Bool
-propInvFormulaIncomp phi b = incomparables (invFormula phi b)
+-- propInvIIIncomp :: II -> Dir -> Bool
+-- propInvIIIncomp phi b = incomparables (invII phi b)
+
+-- | Face
+
+type Face = (Name,II)
+
+showFace :: Face -> String
+showFace (i,j) = "(" ++ show i ++ " = " ++ show j ++ ")"
+
+-- swapFace :: Face -> (Name,Name) -> Face
+-- swapFace alpha ij = map (`swapName` ij) alpha
+
+-- Check if two faces are compatible
+compatible :: Face -> Face -> Bool
+compatible (i,Dir d) (j,Dir d') | i == j = d == d'
+compatible _ _ = True
+
+-- compatibles :: [Face] -> Bool
+-- compatibles []     = True
+-- compatibles (x:xs) = all (x `compatible`) xs && compatibles xs
+
+allCompatible :: [Face] -> [(Face,Face)]
+allCompatible []     = []
+allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
+
+-- Partial composition operation
+-- meet :: Face -> Face -> Face
+-- meet = unionWith f
+--   where f d1 d2 = if d1 == d2 then d1 else error "meet: incompatible faces"
+
+-- meetMaybe :: Face -> Face -> Maybe Face
+-- meetMaybe x y = if compatible x y then Just $ meet x y else Nothing
+
+-- meets :: [Face] -> [Face] -> [Face]
+-- meets xs ys = nub [ meet x y | x <- xs, y <- ys, compatible x y ]
+
+-- meetss :: [[Face]] -> [Face]
+-- meetss = foldr meets [eps]
+
+-- leq :: Face -> Face -> Bool
+-- alpha `leq` beta = meetMaybe alpha beta == Just alpha
+
+-- comparable :: Face -> Face -> Bool
+-- comparable alpha beta = alpha `leq` beta || beta `leq` alpha
+
+-- incomparables :: [Face] -> Bool
+-- incomparables []     = True
+-- incomparables (x:xs) = all (not . (x `comparable`)) xs && incomparables xs
+
+(~>) :: Name -> Dir -> Face -- TODO: Name -> II -> Face ????
+i ~> d = (i,Dir d)
+
+-- eps :: Face
+-- eps = Map.empty
+
+-- minus :: Face -> Face -> Face
+-- minus alpha beta = alpha Map.\\ beta
+
+
 
 -- | Nominal
 
@@ -234,7 +187,7 @@ class Nominal a where
 --  support :: a -> [Name]
   occurs :: Name -> a -> Bool
 --  occurs x v = x `elem` support v
-  act     :: Bool -> a -> (Name,Formula) -> a
+  act     :: Bool -> a -> Face -> a -- TODO: rename
   swap    :: a -> (Name,Name) -> a
 
 
@@ -319,146 +272,121 @@ instance Nominal a => Nominal (Maybe a)  where
   act x v f  = fmap (\y -> act x y f) v
   swap a n   = fmap (`swap` n) a
 
-instance Nominal Formula where
+instance Nominal II where
   -- support (Dir _)        = []
-  -- support (Atom i)       = [i]
-  -- support (NegAtom i)    = [i]
-  -- support (phi :/\: psi) = support phi `union` support psi
-  -- support (phi :\/: psi) = support phi `union` support psi
+  -- support (Name i)       = [i]
 
   occurs x u = case u of
     Dir _ -> False
-    Atom i -> x == i
-    NegAtom i -> x == i
-    phi :/\: psi -> occurs x phi || occurs x psi
-    phi :\/: psi -> occurs x phi || occurs x psi
+    Name i -> x == i
 
-  act x (Dir b) (i,phi)  = Dir b
-  act x (Atom j) (i,phi) | i == j    = phi
-                       | otherwise = Atom j
-  act x (NegAtom j) (i,phi) | i == j    = negFormula phi
-                          | otherwise = NegAtom j
-  act x (psi1 :/\: psi2) (i,phi) = act x psi1 (i,phi) `andFormula` act x psi2 (i,phi)
-  act x (psi1 :\/: psi2) (i,phi) = act x psi1 (i,phi) `orFormula` act x psi2 (i,phi)
+  act _ (Dir b) (i,r)  = Dir b
+  act _ (Name j) (i,r) | i == j    = r
+                       | otherwise = Name j
 
   swap (Dir b) (i,j)  = Dir b
-  swap (Atom k) (i,j)| k == i    = Atom j
-                     | k == j    = Atom i
-                     | otherwise = Atom k
-  swap (NegAtom k) (i,j)| k == i    = NegAtom j
-                        | k == j    = NegAtom i
-                        | otherwise = NegAtom k
-  swap (psi1 :/\: psi2) (i,j) = swap psi1 (i,j) :/\: swap psi2 (i,j)
-  swap (psi1 :\/: psi2) (i,j) = swap psi1 (i,j) :\/: swap psi2 (i,j)
+  swap (Name k) (i,j) | k == i    = Name j
+                      | k == j    = Name i
+                      | otherwise = Name k
 
-supportFormula :: Formula -> [Name]
-supportFormula (Dir _)        = []
-supportFormula (Atom i)       = [i]
-supportFormula (NegAtom i)    = [i]
-supportFormula (phi :/\: psi) = supportFormula phi `union` supportFormula psi
-supportFormula (phi :\/: psi) = supportFormula phi `union` supportFormula psi
+supportII :: II -> [Name]
+supportII (Dir _)        = []
+supportII (Name i)       = [i]
 
 -- foldrWithKey (\i d a -> act x a (i,Dir d))
 face :: Nominal a => a -> Face -> a
-face x f = faceloop x (assocs f)
-  where
-  faceloop x [] = x
-  faceloop x ((i,d):xs) -- | not (i `occurs` x) = faceloop x xs
-                        -- | otherwise =
-                        = faceloop (act True x (i,Dir d)) xs
+face x f = act True x f -- faceloop x (assocs f)
+  -- where
+  -- faceloop x [] = x
+  -- faceloop x ((i,d):xs) -- | not (i `occurs` x) = faceloop x xs
+  --                       -- | otherwise =
+  --                       = faceloop (act True x (i,Dir d)) xs
 
 -- the faces should be incomparable
-type System a = Map Face a
-
-showListSystem :: Show a => [(Face,a)] -> String
-showListSystem [] = "[]"
-showListSystem ts =
-  "[ " ++ intercalate ", " [ showFace alpha ++ " -> " ++ show u
-                           | (alpha,u) <- ts ] ++ " ]"
+data System a = Sys [(Face,a)]
+              | Triv a
 
 showSystem :: Show a => System a -> String
-showSystem = showListSystem . toList
+showSystem (Sys []) = "[]"
+showSystem (Sys ts) =
+  "[ " ++ intercalate ", " [ showFace alpha ++ " -> " ++ show u
+                           | (alpha,u) <- ts ] ++ " ]"
+showSystem (Triv a) = "[ T -> " ++ show a ++ " ]"  -- TODO: Maybe just show a?
 
-insertSystem :: Face -> a -> System a -> System a
-insertSystem alpha v ts =
-  -- | any (leq alpha) (keys ts) = ts
---  | otherwise =
-    Map.insert alpha v ts
-                -- (Map.filterWithKey (\gamma _ -> not (gamma `leq` alpha)) ts)
+insertSystem :: (Face,a) -> System a -> System a
+insertSystem v (Sys ts) = Sys (v : ts)     -- TODO: maybe check is (alpha,v) occurs in ts?
+insertSystem _ x = x
 
 insertsSystem :: [(Face, a)] -> System a -> System a
-insertsSystem faces us = foldr (uncurry insertSystem) us faces
+insertsSystem faces us = foldr insertSystem us faces
 
-mkSystem :: [(Face, a)] -> System a
-mkSystem = flip insertsSystem Map.empty
-
-unionSystem :: System a -> System a -> System a
-unionSystem us vs = insertsSystem (assocs us) vs
-
-
-joinSystem :: System (System a) -> System a
-joinSystem tss = mkSystem $
-  [ (alpha `meet` beta,t) | (alpha,ts) <- assocs tss, (beta,t) <- assocs ts ]
+-- joinSystem :: System (System a) -> System a
+-- joinSystem tss = mkSystem $
+--   [ (alpha `meet` beta,t) | (alpha,ts) <- assocs tss, (beta,t) <- assocs ts ]
 
 -- Calculates shape corresponding to (phi=dir)
-invSystem :: Formula -> Dir -> System ()
-invSystem phi dir = mkSystem $ map (,()) $ invFormula phi dir
+-- invSystem :: II -> Dir -> System ()
+-- invSystem phi dir = mkSystem $ map (,()) $ invII phi dir
 
 allSystem :: Name -> System a -> System a
-allSystem i = filterWithKey (\alpha _ -> i `notMember` alpha)
+allSystem i (Sys xs) = Sys (filter (\((j,r),_) -> i /= j && not (occurs i r)) xs)
+allSystem _ x = x
 
-transposeSystemAndList :: System [a] -> [b] -> [(System a,b)]
-transposeSystemAndList _  []      = []
-transposeSystemAndList tss (u:us) =
-  (Map.map head tss,u):transposeSystemAndList (Map.map tail tss) us
+-- TODO: adapt
+-- transposeSystemAndList :: System [a] -> [b] -> [(System a,b)]
+-- transposeSystemAndList _  []      = []
+-- transposeSystemAndList tss (u:us) =
+--   (map head tss,u):transposeSystemAndList (map tail tss) us
 
-
--- Now we ensure that the keys are incomparable
 instance Nominal a => Nominal (System a) where
   -- support s = unions (map keys $ keys s)
   --             `union` support (elems s)
 
-  occurs x s = x `elem` (concatMap Map.keys $ Map.keys s) ||
-               occurs x (Map.elems s)
+  occurs x (Sys s) = or [ x == i || occurs x r || occurs x a | ((i,r),a) <- s ]
+  occurs x (Triv a) = occurs x a
 
-  act b s (i, phi) = addAssocs (assocs s)
-    where
-    addAssocs [] = Map.empty
-    addAssocs ((alpha,u):alphaus) =
-      let s' = addAssocs alphaus
-      in case Map.lookup i alpha of
-        Just d -> let beta = Map.delete i alpha
-                  in foldr (\delta s'' -> insertSystem (meet delta beta)
-                                            (face u (Map.delete i delta)) s'')
-                                            s' (invFormula (face phi beta) d)
-        Nothing -> insertSystem alpha (act b u (i,face phi alpha)) s'
+  act b (Sys []) (i,r) = Sys []
+  act b (Sys (((j,s),a):xs)) (i,r) = case act b (Sys xs) (i,r) of
+    Triv x -> Triv x
+    Sys xs' -> case (act b (Name j) (i,r),act b s (i,r)) of
+      (x,y) | x == y -> Triv (act b a (i,r))             -- if 0=0, 1=1 or i=i then trivial
+      (Dir _,Dir _) -> Sys xs'                           -- remove 0=1 and 1=0
+      (Dir d,Name x) -> Sys (((x,Dir d),act b a (i,r)) : xs') -- swap direction
+      (Name x,y) -> Sys (((x,y),act b a (i,r)) : xs')    -- good direction                                   
+  act b (Triv a) (i,r) = Triv (act b a (i,r))
 
-  swap s ij = mapKeys (`swapFace` ij) (Map.map (`swap` ij) s)
+  swap (Sys s) ij = Sys [ ((swapName i ij,swap r ij),swap a ij) | ((i,r),a) <- s ]
+  swap (Triv a) ij = Triv (swap a ij)
 
 -- carve a using the same shape as the system b
 border :: Nominal a => a -> System b -> System a
-border v = mapWithKey (const . face v)
+border v (Sys xs) = Sys [ ((i,r),v) | ((i,r),_) <- xs ]
+border v (Triv _) = Triv v
 
 shape :: System a -> System ()
 shape = border ()
 
-sym :: Nominal a => a -> Name -> a
-sym a i = act False a (i, NegAtom i)
+-- sym :: Nominal a => a -> Name -> a
+-- sym a i = act False a (i, NegName i)
 
 rename :: Nominal a => a -> (Name, Name) -> a
 rename a (i, j) = swap a (i,j)
 
-conj, disj :: Nominal a => a -> (Name, Name) -> a
-conj a (i, j) = act False a (i, Atom i :/\: Atom j)
-disj a (i, j) = act False a (i, Atom i :\/: Atom j)
+-- conj, disj :: Nominal a => a -> (Name, Name) -> a
+-- conj a (i, j) = act False a (i, Name i :/\: Name j)
+-- disj a (i, j) = act False a (i, Name i :\/: Name j)
 
-leqSystem :: Face -> System a -> Bool
-alpha `leqSystem` us =
-  not $ Map.null $ filterWithKey (\beta _ -> alpha `leq` beta) us
+-- leqSystem :: Face -> System a -> Bool
+-- alpha `leqSystem` us =
+--   not $ Map.null $ filterWithKey (\beta _ -> alpha `leq` beta) us
 
+-- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us
 proj :: (Nominal a, Show a) => System a -> Face -> a
-proj us alpha = us `face` alpha ! eps
+proj us alpha = case us `face` alpha of
+  Triv a -> a
+  _ -> error "proj"
+  
   --   | eps `member` usalpha = usalpha ! eps
   --   | otherwise            =
   -- error $ "proj: eps not in " ++ show usalpha ++ "\nwhich  is the "
@@ -466,4 +394,5 @@ proj us alpha = us `face` alpha ! eps
   -- where usalpha = us `face` alpha
 
 domain :: System a -> [Name]
-domain  = keys . Map.unions . keys
+domain (Triv _) = []
+domain (Sys xs) = [ i | ((i,_),_) <- xs ] ++ [ i | ((_,Name i),_) <- xs ] -- keys . Map.unions . keys
