@@ -159,8 +159,8 @@ data Val = VU
          -- | VGlueElem Val (System Val)
          -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
-           -- Composition in the universe
-         | VHCompU Val (System Val)
+           -- Composition in the universe. Should be FCom
+         -- | VHCompU Val (System Val)
 
            -- Composition; the type is constant
          | VHCom II II Val (System Val) Val
@@ -443,7 +443,7 @@ showVal v = case v of
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
   -- VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b]
   --                        <+> text (show es)
-  VHCompU a ts        -> text "hcomp U" <+> showVal1 a <+> text (show ts)
+  -- VHCompU a ts        -> text "hcomp U" <+> showVal1 a <+> text (show ts)
 
 showPLam :: Val -> Doc
 showPLam e = case e of
