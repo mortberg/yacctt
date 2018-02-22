@@ -17,3 +17,7 @@ funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
 -- Transport can be defined using comp
 trans (A B : U) (p : Path U A B) (a : A) : B = coe 0 -> 1 p a
 transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1 -> 0 p b
+
+transFill (A B : U) (p : Path U A B) (a : A) :
+  PathP p a (trans A B p a) = <i> coe 0 -> i p a
+

@@ -127,8 +127,8 @@ instance Nominal Val where
          VSnd u                  -> sndVal (subst u (i,r))
          VCon c vs               -> VCon c (subst vs (i,r))
          VPCon c a vs phis       -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
-         VHCom r s a us u        -> undefined -- hCompLine (subst a (i,r)) (subst u (i,r)) (subst us (i,r))
-         VCoe r s a u            -> undefined -- transLine (subst a (i,r)) (subst psi (i,r)) (subst u (i,r))
+         VHCom s s' a us u        -> undefined -- hCompLine (subst a (i,r)) (subst u (i,r)) (subst us (i,r))
+         VCoe s s' a u            -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
          VVar x v                -> VVar x (subst v (i,r))
          VOpaque x v             -> VOpaque x (subst v (i,r))
          VAppII u psi       -> subst u (i,r) @@ subst psi (i,r)
@@ -202,7 +202,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   AppII e phi    -> eval rho e @@ evalII rho phi
   HCom r s a ts t0       -> undefined
 --    hCompLine (eval rho a) (eval rho t0) (evalSystem rho ts)
-  Coe r s a t       -> undefined
+  Coe r s a t       -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
 --    transLine (eval rho a) (evalII rho phi) (eval rho t)
   -- Comp a t0 ts        ->
   --   compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
@@ -432,6 +432,19 @@ v @@@ j           = VAppII v (toII j)
 
 
 -----------------------------------------------------------
+-- Coe
+coeLine :: II -> II -> Val -> Val -> Val
+coeLine r s a u = coe i r s (a @@ i) u
+  where i = fresh (r,s,a,u)
+
+coe :: Name -> II -> II -> Val -> Val -> Val
+coe i r s a u | r == s = u
+              | otherwise = case u of
+                  VPathP p v0 v1 -> error "coe vpath"
+                  _ -> VCoe r s (VPLam i a) u
+--                  x -> error ("coe undefined: " ++ show x)
+
+        
 -- Transport and forward
 
 -- transLine :: Val -> II -> Val -> Val
@@ -771,7 +784,7 @@ instance Convertible Val where
       (VPLam i a,p')             -> conv ns (a `swap` (i,j)) (p' @@ j)
       (p,VPLam i' a')            -> conv ns (p @@ j) (a' `swap` (i',j))
       (VAppII u x,VAppII u' x') -> conv ns (u,x) (u',x')
-      (VCoe r s a u,VCoe r' s' a' u')  -> undefined
+      (VCoe r s a u,VCoe r' s' a' u') -> conv ns (r,s,a,u) (r',s',a',u')
         -- -- TODO: Maybe identify via (- = 1)?  Or change argument to a system..
         -- conv ns (a,invSystem phi One,u) (a',invSystem phi' One,u')
         -- conv ns (a,phi,u) (a',phi',u')
@@ -809,7 +822,7 @@ instance Convertible a => Convertible (System a) where
                    -- and (elems (intersectionWith (conv ns) ts ts'))
 
 instance Convertible II where
-  conv _ phi psi = undefined -- dnf phi == dnf psi
+  conv _ r s = r == s -- dnf phi == dnf psi
 
 instance Convertible (Nameless a) where
   conv _ _ _ = True
