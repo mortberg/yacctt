@@ -296,13 +296,14 @@ supportII (Name i)       = [i]
 -- the faces should be incomparable
 data System a = Sys [(Face,a)]
               | Triv a
+  deriving Eq
 
-showSystem :: Show a => System a -> String
-showSystem (Sys []) = "[]"
-showSystem (Sys ts) =
-  "[ " ++ intercalate ", " [ showFace alpha ++ " -> " ++ show u
-                           | (alpha,u) <- ts ] ++ " ]"
-showSystem (Triv a) = "[ T -> " ++ show a ++ " ]"  -- TODO: Maybe just show a?
+instance Show a => Show (System a) where
+  show (Sys []) = "[]"
+  show (Sys ts) =
+    "[ " ++ intercalate ", " [ showFace alpha ++ " -> " ++ show u
+                             | (alpha,u) <- ts ] ++ " ]"
+  show (Triv a) = "[ T -> " ++ show a ++ " ]"  -- TODO: Maybe just show a?
 
 insertSystem :: (Face,a) -> System a -> System a
 insertSystem v (Sys ts) = Sys (v : ts)     -- TODO: maybe check is (alpha,v) occurs in ts?

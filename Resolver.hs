@@ -15,7 +15,6 @@ import qualified Data.Map as Map
 import Exp.Abs
 import CTT (Ter,Ident,Loc(..),mkApps,mkWheres)
 import qualified CTT
-import Cartesian (negFormula,andFormula,orFormula)
 import qualified Cartesian as C
 
 -- | Useful auxiliary functions
@@ -47,9 +46,9 @@ appsToIdents = mapM unVar . uncurry (:) . flip unApps []
 
 -- Transform a sequence of applications
 -- (((u v1) .. vn) phi1) .. phim into (u,[v1,..,vn],[phi1,..,phim])
-unAppsFormulas :: Exp -> [Formula]-> (Exp,[Exp],[Formula])
-unAppsFormulas (AppFormula u phi) phis = unAppsFormulas u (phi:phis)
-unAppsFormulas u phis = (x,xs,phis)
+unAppsIIs :: Exp -> [II]-> (Exp,[Exp],[II])
+unAppsIIs (AppII u phi) phis = unAppsIIs u (phi:phis)
+unAppsIIs u phis = (x,xs,phis)
   where (x,xs) = unApps u []
 
 -- Flatten a tele
@@ -125,7 +124,7 @@ resolveName (AIdent (l,x)) = do
   modName <- asks envModule
   vars <- asks variables
   case lookup x vars of
-    Just Name -> return $ C.Name x
+    Just Name -> return $ C.N x
     _ -> throwError $ "Cannot resolve name " ++ x ++ " at position " ++
                       show l ++ " in module " ++ modName
 
@@ -154,7 +153,7 @@ lams :: [(Ident,Exp)] -> Resolver Ter -> Resolver Ter
 lams = flip $ foldr lam
 
 plam :: AIdent -> Resolver Ter -> Resolver Ter
-plam i e = CTT.PLam (C.Name (unAIdent i)) <$> local (insertName i) e
+plam i e = CTT.PLam (C.N (unAIdent i)) <$> local (insertName i) e
 
 plams :: [AIdent] -> Resolver Ter -> Resolver Ter
 plams [] _ = throwError "Empty plam abstraction"
@@ -204,29 +203,21 @@ resolveExp e = case e of
     mkWheres rdecls <$> local (insertIdents names) (resolveExp e)
   PLam is e     -> plams is (resolveExp e)
   Hole (HoleIdent (l,_)) -> CTT.Hole <$> getLoc l
-  AppFormula t phi ->
-    let (x,xs,phis) = unAppsFormulas e []
+  AppII t phi ->
+    let (x,xs,phis) = unAppsIIs e []
     in case x of
       PCon n a ->
         CTT.PCon (unAIdent n) <$> resolveExp a <*> mapM resolveExp xs
-                              <*> mapM resolveFormula phis
-      _ -> CTT.AppFormula <$> resolveExp t <*> resolveFormula phi
+                              <*> mapM resolveII phis
+      _ -> CTT.AppII <$> resolveExp t <*> resolveII phi
   PathP a u v   -> CTT.PathP <$> resolveExp a <*> resolveExp u <*> resolveExp v
-  HComp u v ts  -> CTT.HComp <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  HFill u v ts  -> CTT.HFill <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  Comp u v ts   -> CTT.Comp <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  Fill u v ts   -> CTT.Fill <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  -- Transport u v -> CTT.Trans <$> resolveExp u <*> pure (C.Dir C.Zero) <*> resolveExp v
-  Transport u v -> CTT.Comp <$> resolveExp u <*> resolveExp v <*> pure Map.empty
-  Trans u phi v -> CTT.Trans <$> resolveExp u <*> resolveFormula phi <*> resolveExp v
-  Glue u ts     -> CTT.Glue <$> resolveExp u <*> resolveSystem ts
-  GlueElem u ts -> CTT.GlueElem <$> resolveExp u <*> resolveSystem ts
-  UnGlueElem u v ts ->
-    CTT.UnGlueElem <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  -- Id a u v      -> CTT.Id <$> resolveExp a <*> resolveExp u <*> resolveExp v
-  -- IdPair u ts   -> CTT.IdPair <$> resolveExp u <*> resolveSystem ts
-  -- IdJ a t c d x p -> CTT.IdJ <$> resolveExp a <*> resolveExp t <*> resolveExp c
-  --                            <*> resolveExp d <*> resolveExp x <*> resolveExp p
+  Coe r s u v -> CTT.Coe <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveExp v
+  HCom r s u ts v  -> CTT.HCom <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
+  -- Com r s u ts v  -> CTT.Com <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
+  -- Glue u ts     -> CTT.Glue <$> resolveExp u <*> resolveSystem ts
+  -- GlueElem u ts -> CTT.GlueElem <$> resolveExp u <*> resolveSystem ts
+  -- UnGlueElem u v ts ->
+  --   CTT.UnGlueElem <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
   _ -> do
     modName <- asks envModule
     throwError ("Could not resolve " ++ show e ++ " in module " ++ modName)
@@ -241,27 +232,20 @@ resolveSystem (System ts) = do
   let alphas = map fst ts'
   unless (nub alphas == alphas) $
     throwError $ "system contains same face multiple times: " ++
-                 C.showListSystem ts'
+                 show ts'
   -- Note: the symbols in alpha are in scope in u, but they mean 0 or 1
-  return $ Map.fromList ts'
+  return (C.Sys ts')
 
-resolveFace :: [Face] -> Resolver C.Face
-resolveFace alpha =
-  Map.fromList <$> sequence [ (,) <$> resolveName i <*> resolveDir d
-                            | Face i d <- alpha ]
+resolveFace :: Face -> Resolver C.Face
+resolveFace (Face i d) = (,) <$> resolveName i <*> resolveII d
 
 resolveDir :: Dir -> Resolver C.Dir
 resolveDir Dir0 = return 0
 resolveDir Dir1 = return 1
 
-resolveFormula :: Formula -> Resolver C.Formula
-resolveFormula (Dir d)          = C.Dir <$> resolveDir d
-resolveFormula (Atom i)         = C.Atom <$> resolveName i
-resolveFormula (Neg phi)        = negFormula <$> resolveFormula phi
-resolveFormula (Conj phi _ psi) =
-    andFormula <$> resolveFormula phi <*> resolveFormula psi
-resolveFormula (Disj phi psi)   =
-    orFormula <$> resolveFormula phi <*> resolveFormula psi
+resolveII :: II -> Resolver C.II
+resolveII (Dir d)          = C.Dir <$> resolveDir d
+resolveII (Atom i)         = C.Name <$> resolveName i
 
 resolveBranch :: Branch -> Resolver CTT.Branch
 resolveBranch (OBranch (AIdent (_,lbl)) args e) = do
@@ -269,7 +253,7 @@ resolveBranch (OBranch (AIdent (_,lbl)) args e) = do
   return $ CTT.OBranch lbl (map unAIdent args) re
 resolveBranch (PBranch (AIdent (_,lbl)) args is e) = do
   re <- local (insertNames is . insertAIdents args) $ resolveWhere e
-  let names = map (C.Name . unAIdent) is
+  let names = map (C.N . unAIdent) is
   return $ CTT.PBranch lbl (map unAIdent args) names re
 
 resolveTele :: [(Ident,Exp)] -> Resolver CTT.Tele
@@ -283,7 +267,7 @@ resolveLabel _ (OLabel n vdecl) =
 resolveLabel cs (PLabel n vdecl is sys) = do
   let tele' = flattenTele vdecl
       ts    = map fst tele'
-      names = map (C.Name . unAIdent) is
+      names = map (C.N . unAIdent) is
       n'    = unAIdent n
       cs'   = delete (n',PConstructor) cs
   CTT.PLabel n' <$> resolveTele tele' <*> pure names

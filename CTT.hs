@@ -99,7 +99,7 @@ data Ter = Pi Ter
          | Snd Ter
            -- constructor c Ms
          | Con LIdent [Ter]
-         | PCon LIdent Ter [Ter] [Formula] -- c A ts phis (A is the data type)
+         | PCon LIdent Ter [Ter] [II] -- c A ts phis (A is the data type)
            -- branches c1 xs1  -> M1,..., cn xsn -> Mn
          | Split Ident Loc Ter [Branch]
            -- labelled sum c1 A1s,..., cn Ans (assumes terms are constructors)
@@ -111,20 +111,17 @@ data Ter = Pi Ter
            -- Path types
          | PathP Ter Ter Ter
          | PLam Name Ter
-         | AppFormula Ter Formula
-           -- Homogeneous Kan composition and filling
-         | HComp Ter Ter (System Ter)
-         | HFill Ter Ter (System Ter)
-           -- Generalized transports
-         | Trans Ter Formula Ter
-         -- TODO?: TransFill Ter Formula Ter
-           -- Heterogeneous Kan composition and filling
-         | Comp Ter Ter (System Ter)
-         | Fill Ter Ter (System Ter)
+         | AppII Ter II
+           -- Coe
+         | Coe II II Ter Ter
+           -- Homogeneous Kan composition
+         | HCom II II Ter (System Ter) Ter
+           -- Kan composition           
+         -- | Com II II Ter (System Ter) Ter
            -- Glue
-         | Glue Ter (System Ter)
-         | GlueElem Ter (System Ter)
-         | UnGlueElem Ter Ter (System Ter)
+         -- | Glue Ter (System Ter)
+         -- | GlueElem Ter (System Ter)
+         -- | UnGlueElem Ter Ter (System Ter)
   deriving Eq
 
 -- For an expression t, returns (u,ts) where u is no application and t = u ts
@@ -151,25 +148,25 @@ data Val = VU
          | VSigma Val Val
          | VPair Val Val
          | VCon LIdent [Val]
-         | VPCon LIdent Val [Val] [Formula]
+         | VPCon LIdent Val [Val] [II]
 
            -- Path values
          | VPathP Val Val Val
          | VPLam Name Val
 
            -- Glue values
-         | VGlue Val (System Val)
-         | VGlueElem Val (System Val)
-         | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
+         -- | VGlue Val (System Val)
+         -- | VGlueElem Val (System Val)
+         -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
            -- Composition in the universe
          | VHCompU Val (System Val)
 
            -- Composition; the type is constant
-         | VHComp Val Val (System Val)
+         | VHCom II II Val (System Val) Val
 
-           -- Generalized transport
-         | VTrans Val Formula Val
+           -- Coe
+         | VCoe II II Val Val
 
            -- Neutral values:
          | VVar Ident Val
@@ -178,9 +175,9 @@ data Val = VU
          | VSnd Val
          | VSplit Val Val
          | VApp Val Val
-         | VAppFormula Val Formula
+         | VAppII Val II
          | VLam Ident Val Val
-         | VUnGlueElemU Val Val (System Val)
+         -- | VUnGlueElemU Val Val (System Val)
   deriving Eq
 
 isNeutral :: Val -> Bool
@@ -189,19 +186,20 @@ isNeutral v = case v of
   Ter Hole{} _   -> True
   VVar{}         -> True
   VOpaque{}      -> True
-  VHComp{}       -> True
-  VTrans{}       -> True
+  VHCom{}       -> True
+  VCoe{}        -> True
   VFst{}         -> True
   VSnd{}         -> True
   VSplit{}       -> True
   VApp{}         -> True
-  VAppFormula{}  -> True
-  VUnGlueElemU{} -> True
-  VUnGlueElem{}  -> True
+  VAppII{}  -> True
+  -- VUnGlueElemU{} -> True
+  -- VUnGlueElem{}  -> True
   _              -> False
 
 isNeutralSystem :: System Val -> Bool
-isNeutralSystem = any isNeutral . elems
+isNeutralSystem (Sys xs) = any isNeutral (map snd xs)
+isNeutralSystem (Triv a) = isNeutral a
 
 -- isNeutralPath :: Val -> Bool
 -- isNeutralPath (VPath _ v) = isNeutral v
@@ -224,7 +222,7 @@ isCon _      = False
 
 -- Constant path: <_> v
 constPath :: Val -> Val
-constPath = VPLam (Name "_")
+constPath = VPLam (N "_")
 
 
 --------------------------------------------------------------------------------
@@ -250,7 +248,7 @@ instance Eq Ctxt where
 -- lists. This is more efficient because acting on an environment now
 -- only need to affect the lists and not the whole context.
 -- The last list is the list of opaque names
-newtype Env = Env (Ctxt,[Val],[Formula],Nameless (Set Ident))
+newtype Env = Env (Ctxt,[Val],[II],Nameless (Set Ident))
   deriving (Eq)
 
 emptyEnv :: Env
@@ -270,7 +268,7 @@ defWhere (OpaqueDecl _) rho = rho
 defWhere (TransparentDecl _) rho = rho
 defWhere TransparentAllDecl rho = rho
 
-sub :: (Name,Formula) -> Env -> Env
+sub :: (Name,II) -> Env -> Env
 sub (i,phi) (Env (rho,vs,fs,os)) = Env (Sub i rho,vs,phi:fs,os)
 
 upd :: (Ident,Val) -> Env -> Env
@@ -282,20 +280,20 @@ upds xus rho = foldl (flip upd) rho xus
 updsTele :: Tele -> [Val] -> Env -> Env
 updsTele tele vs = upds (zip (map fst tele) vs)
 
-subs :: [(Name,Formula)] -> Env -> Env
+subs :: [(Name,II)] -> Env -> Env
 subs iphis rho = foldl (flip sub) rho iphis
 
-mapEnv :: (Val -> Val) -> (Formula -> Formula) -> Env -> Env
+mapEnv :: (Val -> Val) -> (II -> II) -> Env -> Env
 mapEnv f g (Env (rho,vs,fs,os)) = Env (rho,map f vs,map g fs,os)
 
-valAndFormulaOfEnv :: Env -> ([Val],[Formula])
-valAndFormulaOfEnv (Env (_,vs,fs,_)) = (vs,fs)
+valAndIIOfEnv :: Env -> ([Val],[II])
+valAndIIOfEnv (Env (_,vs,fs,_)) = (vs,fs)
 
 valOfEnv :: Env -> [Val]
-valOfEnv = fst . valAndFormulaOfEnv
+valOfEnv = fst . valAndIIOfEnv
 
-formulaOfEnv :: Env -> [Formula]
-formulaOfEnv = snd . valAndFormulaOfEnv
+formulaOfEnv :: Env -> [II]
+formulaOfEnv = snd . valAndIIOfEnv
 
 domainEnv :: Env -> [Name]
 domainEnv (Env (rho,_,_,_)) = domCtxt rho
@@ -347,11 +345,8 @@ instance Show Loc where
 showLoc :: Loc -> Doc
 showLoc (Loc name (i,j)) = text (show (i,j) ++ " in " ++ name)
 
-showFormula :: Formula -> Doc
-showFormula phi = case phi of
-  _ :\/: _ -> parens (text (show phi))
-  _ :/\: _ -> parens (text (show phi))
-  _ -> text $ show phi
+showII :: II -> Doc
+showII = text . show
 
 instance Show Ter where
   show = render . showTer
@@ -371,7 +366,7 @@ showTer v = case v of
   Var x              -> text x
   Con c es           -> text c <+> showTers es
   PCon c a es phis   -> text c <+> braces (showTer a) <+> showTers es
-                        <+> hsep (map ((char '@' <+>) . showFormula) phis)
+                        <+> hsep (map ((char '@' <+>) . showII) phis)
   Split f _ _ _      -> text f
   Sum _ n _          -> text n
   HSum _ n _         -> text n
@@ -379,16 +374,13 @@ showTer v = case v of
   Hole{}             -> text "?"
   PathP e0 e1 e2     -> text "PathP" <+> showTers [e0,e1,e2]
   PLam i e           -> char '<' <> text (show i) <> char '>' <+> showTer e
-  AppFormula e phi   -> showTer1 e <+> char '@' <+> showFormula phi
-  HComp a t ts       -> text "hcomp" <+> showTers [a,t] <+> text (showSystem ts)
-  HFill a t ts       -> text "hfill" <+> showTers [a,t] <+> text (showSystem ts)
-  Trans e phi t0     -> text "transGen" <+> showTer1 e <+> showFormula phi
-                        <+> showTer1 t0
-  Comp e t ts        -> text "comp" <+> showTers [e,t] <+> text (showSystem ts)
-  Fill e t ts        -> text "fill" <+> showTers [e,t] <+> text (showSystem ts)
-  Glue a ts          -> text "Glue" <+> showTer1 a <+> text (showSystem ts)
-  GlueElem a ts      -> text "glue" <+> showTer1 a <+> text (showSystem ts)
-  UnGlueElem a b ts  -> text "unglue" <+> showTers [a,b] <+> text (showSystem ts)
+  AppII e phi   -> showTer1 e <+> char '@' <+> showII phi
+  HCom r s a ts t  -> text "hcom" <+> showII r <+> text "->" <+> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
+  Coe r s e t0     -> text "coe" <+> showII r <+> text "->" <+> showII s <+> showTer1 e <+> showTer1 t0
+  -- Comp e t ts        -> text "comp" <+> showTers [e,t] <+> text (show ts)
+  -- Glue a ts          -> text "Glue" <+> showTer1 a <+> text (show ts)
+  -- GlueElem a ts      -> text "glue" <+> showTer1 a <+> text (show ts)
+  -- UnGlueElem a b ts  -> text "unglue" <+> showTers [a,b] <+> text (show ts)
 
 showTers :: [Ter] -> Doc
 showTers = hsep . map showTer1
@@ -427,10 +419,9 @@ showVal v = case v of
   Ter t rho         -> showTer1 t <+> showEnv True rho
   VCon c us         -> text c <+> showVals us
   VPCon c a us phis -> text c <+> braces (showVal a) <+> showVals us
-                       <+> hsep (map ((char '@' <+>) . showFormula) phis)
-  VHComp v0 v1 vs   -> text "hcomp" <+> showVals [v0,v1] <+> text (showSystem vs)
-  VTrans u phi v0   -> text "transGen" <+> showVal1 u <+> showFormula phi
-                       <+> showVal1 v0
+                       <+> hsep (map ((char '@' <+>) . showII) phis)
+  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <+> text "->" <+> showII s <+> showVal v0 <+> text (show vs) <+> showVal v1
+  VCoe r s u v0   -> text "coe" <+> showII r <+> text "->" <+> showII s <+> showVal1 u <+> showVal1 v0
   VPi a l@(VLam x t b)
     | "_" `isPrefixOf` x -> showVal1 a <+> text "->" <+> showVal1 b
     | otherwise          -> char '(' <> showLam v
@@ -446,13 +437,13 @@ showVal v = case v of
   VFst u            -> showVal1 u <> text ".1"
   VSnd u            -> showVal1 u <> text ".2"
   VPathP v0 v1 v2   -> text "PathP" <+> showVals [v0,v1,v2]
-  VAppFormula v phi -> showVal v <+> char '@' <+> showFormula phi
-  VGlue a ts        -> text "Glue" <+> showVal1 a <+> text (showSystem ts)
-  VGlueElem a ts    -> text "glue" <+> showVal1 a <+> text (showSystem ts)
-  VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (showSystem ts)
-  VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b]
-                         <+> text (showSystem es)
-  VHCompU a ts        -> text "hcomp U" <+> showVal1 a <+> text (showSystem ts)
+  VAppII v phi -> showVal v <+> char '@' <+> showII phi
+  -- VGlue a ts        -> text "Glue" <+> showVal1 a <+> text (show ts)
+  -- VGlueElem a ts    -> text "glue" <+> showVal1 a <+> text (show ts)
+  -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
+  -- VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b]
+  --                        <+> text (show es)
+  VHCompU a ts        -> text "hcomp U" <+> showVal1 a <+> text (show ts)
 
 showPLam :: Val -> Doc
 showPLam e = case e of

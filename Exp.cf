@@ -33,18 +33,15 @@ Split.        Exp  ::= "split@" Exp "with" "{" [Branch] "}" ;
 Fun.          Exp1 ::= Exp2 "->" Exp1 ;
 Pi.           Exp1 ::= [PTele] "->" Exp1 ;
 Sigma.        Exp1 ::= [PTele] "*" Exp1 ;
-AppFormula.   Exp2 ::= Exp2 "@" Formula ;
+AppII.        Exp2 ::= Exp2 "@" II ;
 App.          Exp2 ::= Exp2 Exp3 ;
 PathP.        Exp3 ::= "PathP" Exp4 Exp4 Exp4 ;
-Comp.         Exp3 ::= "comp" Exp4 Exp4 System ;
-HComp.        Exp3 ::= "hcomp" Exp4 Exp4 System ;
-HFill.        Exp3 ::= "hfill" Exp4 Exp4 System ;
-Transport.    Exp3 ::= "transport" Exp4 Exp4 ;
-Trans.        Exp3 ::= "transGen" Exp4 Formula Exp4 ;
-Fill.         Exp3 ::= "fill" Exp4 Exp4 System ;
-Glue.         Exp3 ::= "Glue" Exp4 System ;
-GlueElem.     Exp3 ::= "glue" Exp4 System ;
-UnGlueElem.   Exp3 ::= "unglue" Exp4 Exp4 System ;
+Coe.          Exp3 ::= "coe" II "->" II Exp4 Exp4 ;
+HCom.         Exp3 ::= "hcom" II "->" II Exp4 System Exp4 ;
+-- Com.          Exp3 ::= "com" II "->" II Exp4 System Exp4 ;
+-- Glue.         Exp3 ::= "Glue" Exp4 System ;
+-- GlueElem.     Exp3 ::= "glue" Exp4 System ;
+-- UnGlueElem.   Exp3 ::= "unglue" Exp4 Exp4 System ;
 Fst.          Exp4 ::= Exp4 ".1" ;
 Snd.          Exp4 ::= Exp4 ".2" ;
 Pair.         Exp5 ::= "(" Exp "," [Exp] ")" ;
@@ -60,18 +57,13 @@ Dir1.       Dir ::= "1" ;
 
 System.     System ::= "[" [Side] "]" ;
 
-Face.     Face ::= "(" AIdent "=" Dir ")" ;
-separator Face "" ;
-
-Side.   Side ::= [Face] "->" Exp ;
+Side.     Side ::= Face "->" Exp ;
 separator Side "," ;
 
-Disj.     Formula  ::= Formula "\\/" Formula1 ;
-Conj.     Formula1 ::= Formula1 CIdent Formula2 ;
-Neg.      Formula2 ::= "-" Formula2 ;
-Atom.     Formula2 ::= AIdent ;
-Dir.      Formula2 ::= Dir ;
-coercions Formula 2 ;
+Face.     Face ::= "(" AIdent "=" II ")" ;
+
+Atom.     II ::= AIdent ;
+Dir.      II ::= Dir ;
 
 -- Branches
 OBranch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
