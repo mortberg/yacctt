@@ -104,7 +104,7 @@ instance Nominal Val where
     VOpaque _ v             -> occurs x v
     VApp u v                -> occurs x (u,v)
     VLam _ u v              -> occurs x (u,v)
-    VAppII u phi       -> occurs x (u,phi)
+    VAppII u phi            -> occurs x (u,phi)
     VSplit u v              -> occurs x (u,v)
     -- VGlue a ts              -> occurs x (a,ts)
     -- VGlueElem a ts          -> occurs x (a,ts)
@@ -294,7 +294,7 @@ inferType v = case v of
     ty         -> error $ "inferType: expected PathP type for " ++ show v
                   ++ ", got " ++ show ty
   VHCom r s a _ _ -> undefined -- a
-  VCoe r s a _ -> undefined -- a @@ One
+  VCoe r s a _ -> a @@ s
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
