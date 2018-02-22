@@ -234,10 +234,10 @@ resolveSystem (System ts) = do
     throwError $ "system contains same face multiple times: " ++
                  show ts'
   -- Note: the symbols in alpha are in scope in u, but they mean 0 or 1
-  return (C.Sys ts')
+  return (C.Sys (Map.fromList ts'))
 
-resolveFace :: Face -> Resolver C.Face
-resolveFace (Face i d) = (,) <$> resolveName i <*> resolveII d
+resolveFace :: Face -> Resolver C.Eqn
+resolveFace (Face r s) = curry C.eqn <$> resolveII r <*> resolveII s
 
 resolveDir :: Dir -> Resolver C.Dir
 resolveDir Dir0 = return 0

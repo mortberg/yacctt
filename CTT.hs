@@ -198,7 +198,7 @@ isNeutral v = case v of
   _              -> False
 
 isNeutralSystem :: System Val -> Bool
-isNeutralSystem (Sys xs) = any isNeutral (map snd xs)
+isNeutralSystem (Sys xs) = any isNeutral (Map.elems xs)
 isNeutralSystem (Triv a) = isNeutral a
 
 -- isNeutralPath :: Val -> Bool

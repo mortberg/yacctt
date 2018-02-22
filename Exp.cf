@@ -60,7 +60,7 @@ System.     System ::= "[" [Side] "]" ;
 Side.     Side ::= Face "->" Exp ;
 separator Side "," ;
 
-Face.     Face ::= "(" AIdent "=" II ")" ;
+Face.     Face ::= "(" II "=" II ")" ; -- Maybe (AIdent,II)?
 
 Atom.     II ::= AIdent ;
 Dir.      II ::= Dir ;

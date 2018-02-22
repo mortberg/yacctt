@@ -79,6 +79,7 @@ instance ToII Dir where
 data Eqn = Eqn II II
   deriving (Eq,Ord)
 
+eqn :: (II,II) -> Eqn
 eqn (r,s) = Eqn (max r s) (min r s)
 
 instance Show Eqn where
@@ -280,12 +281,14 @@ instance Nominal a => Nominal (System a) where
     where fn eqn a = insertSystem (swap eqn ij,swap a ij)
   swap (Triv a) ij = Triv (swap a ij)
 
+toSubst :: Eqn -> (Name,II)
+toSubst (Eqn (Name i) r) = (i,r)
+toSubst eqn = error $ "toSubst: encountered " ++ show eqn ++ " in system"
+
 -- carve a using the same shape as the system b
 -- relies on Eqn, System invariants
 border :: Nominal a => a -> System b -> System a
-border v (Sys xs) = Sys (Map.mapWithKey fn xs)
-  where fn (Eqn (Name i) r) _ = subst v (i,r)
-        fn eqn _ = error $ "border: encountered " ++ (show eqn) ++ " in system"
+border v (Sys xs) = Sys (Map.mapWithKey (\ir _ -> v `subst` toSubst ir) xs)
 border v (Triv _) = Triv v
 
 shape :: System a -> System ()
@@ -302,6 +305,10 @@ proj us ir = case us `subst` ir of
   Triv a -> a
   _ -> error "proj"
 
--- domain :: System a -> [Name]
--- domain (Triv _) = []
--- domain (Sys xs) = [ i | ((i,_),_) <- xs ] ++ [ i | ((_,Name i),_) <- xs ]
+eqnSupport :: System a -> [Name]
+eqnSupport (Triv _) = []
+eqnSupport (Sys xs) = concatMap support (Map.keys xs)
+  where support (Eqn (Name i) (Dir _)) = [i]
+        support (Eqn (Name i) (Name j)) = [i,j]
+        support eqn = error $ "eqnSupport: encountered " ++ show eqn ++ " in system"
+

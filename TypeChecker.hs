@@ -85,8 +85,9 @@ addDecls d (TEnv ns ind rho v) = TEnv ns ind (def d rho) v
 addTele :: Tele -> TEnv -> TEnv
 addTele xas lenv = foldl (flip addType) lenv xas
 
-faceEnv :: Face -> TEnv -> TEnv
-faceEnv alpha tenv = tenv{env=env tenv `subst` alpha}
+-- Only works for equations in a system (so of shape (Name,II))
+faceEnv :: Eqn -> TEnv -> TEnv
+faceEnv ir tenv = tenv{env=env tenv `subst` toSubst ir}
 
 -------------------------------------------------------------------------------
 -- | Various useful functions
@@ -147,7 +148,7 @@ check a t = case (a,t) of
     PLabel _ tele is ts -> do
       checkTele tele
       rho <- asks env
-      unless (all (`elem` is) (domain ts)) $
+      unless (all (`elem` is) (eqnSupport ts)) $
         throwError "names in path label system" -- TODO
       mapM_ checkFresh is
       let iis = zip is (map Name is)
@@ -259,12 +260,12 @@ checkCompSystem vus = do
 
 -- Check the values at corresponding faces with a function, assumes
 -- systems have the same faces
-checkSystemsWith :: System a -> System b -> (Face -> a -> b -> Typing c) ->
+checkSystemsWith :: System a -> System b -> (Eqn -> a -> b -> Typing c) ->
                     Typing ()
 checkSystemsWith us vs f = undefined -- sequence_ $ elems $ intersectionWithKey f us vs
 
 -- Check the faces of a system
-checkSystemWith :: System a -> (Face -> a -> Typing b) -> Typing ()
+checkSystemWith :: System a -> (Eqn -> a -> Typing b) -> Typing ()
 checkSystemWith us f = undefined -- sequence_ $ elems $ mapWithKey f us
 
 -- Check a glueElem
