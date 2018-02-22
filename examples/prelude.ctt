@@ -15,11 +15,11 @@ funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
        Path ((y : A) -> B y) f g = <i> \(a : A) -> (p a) @ i
 
 -- Transport can be defined using comp
-trans (A B : U) (p : Path U A B) (a : A) : B = coe 0 -> 1 p a
-transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1 -> 0 p b
+trans (A B : U) (p : Path U A B) (a : A) : B = coe 0->1 p a
+transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1->0 p b
 
 transFill (A B : U) (p : Path U A B) (a : A) :
-  PathP p a (trans A B p a) = <i> coe 0 -> i p a
+  PathP p a (trans A B p a) = <i> coe 0->i p a
 
 transK (A B : U) (p : Path U A B) (a : A) :
   Path A a (transNeg A B p (trans A B p a)) = undefined

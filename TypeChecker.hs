@@ -482,11 +482,12 @@ infer e = case e of
   --   return (VPathP (constPath va) vu0 (hCompLine va vu0 vus))
 
   Coe r s a u -> do
---    check VU a
+    checkII r
+    checkII s
+    checkPLam (constPath VU) a
     va <- evalTyping a
     check (va @@ r) u
     return (va @@ s)
-
     
   -- Trans a phi u0 -> do
   --   (va0, va1) <- checkPLam (constPath VU) a
