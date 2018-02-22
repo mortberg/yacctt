@@ -29,7 +29,6 @@ Exp/Test.o : Exp/Par.hi
 Exp/Test.o : Exp/Lex.hi
 Resolver.o : Resolver.hs
 Resolver.o : Cartesian.hi
-Resolver.o : Cartesian.hi
 Resolver.o : CTT.hi
 Resolver.o : CTT.hi
 Resolver.o : Exp/Abs.hi

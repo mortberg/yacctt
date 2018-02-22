@@ -1,0 +1,19 @@
+module prelude where
+
+Path (A : U) (a0 a1 : A) : U = PathP (<i> A) a0 a1
+
+refl (A : U) (a : A) : Path A a a = <i> a
+
+testEta (A : U) (a b : A) (p : Path A a b) : Path (Path A a b) p p =
+  refl (Path A a b) (<i> p @ i)
+
+mapOnPath (A B : U) (f : A -> B) (a b : A)
+          (p : Path A a b) : Path B (f a) (f b) = <i> f (p @ i)
+
+funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
+       (p : (x : A) -> Path (B x) (f x) (g x)) :
+       Path ((y : A) -> B y) f g = <i> \(a : A) -> (p a) @ i
+
+-- Transport can be defined using comp
+trans (A B : U) (p : Path U A B) (a : A) : B = coe 0 -> 1 p a
+transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1 -> 0 p b

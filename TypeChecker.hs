@@ -463,6 +463,7 @@ infer e = case e of
       VPathP a _ _ -> return $ a @@ phi
       _ -> throwError (show e ++ " is not a path")
 
+  HCom r s a us u -> undefined
   -- HComp a u0 us -> do
   --   check VU a
   --   va <- evalTyping a
@@ -479,6 +480,13 @@ infer e = case e of
   --   let vus = evalSystem rho us
   --   return (VPathP (constPath va) vu0 (hCompLine va vu0 vus))
 
+  Coe r s a u -> do
+--    check VU a
+    va <- evalTyping a
+    check (va @@ r) u
+    return (va @@ s)
+
+    
   -- Trans a phi u0 -> do
   --   (va0, va1) <- checkPLam (constPath VU) a
   --   va <- evalTyping a
