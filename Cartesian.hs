@@ -5,12 +5,7 @@ module Cartesian where
 
 import Control.Applicative
 import Data.List
-import Data.Map (Map,(!),keys,fromList,toList,mapKeys,elems,intersectionWith
-                ,unionWith,singleton,foldrWithKey,assocs,mapWithKey
-                ,filterWithKey,member,notMember)
-import Data.Set (Set,isProperSubsetOf)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.Maybe
 import Data.IORef
 import System.IO.Unsafe
@@ -59,13 +54,11 @@ instance Num Dir where
 
 data II = Dir Dir
         | Name Name
-  deriving Eq
+  deriving (Eq,Ord)
 
 instance Show II where
-  show d = show d
-  -- show (Dir Zero)  = "0"
-  -- show (Dir One)   = "1"
-  -- show (Name a)    = show a
+  show (Dir x) = show x
+  show (Name x) = show x
 
 class ToII a where
   toII :: a -> II
@@ -79,80 +72,29 @@ instance ToII Name where
 instance ToII Dir where
   toII = Dir
 
--- Probably not needed?
-merge :: Set (Set (Name,Dir)) -> Set (Set (Name,Dir)) -> Set (Set (Name,Dir))
-merge a b =
-  let as = Set.toList a
-      bs = Set.toList b
-  in Set.fromList [ ai | ai <- as, not (any (`isProperSubsetOf` ai) bs) ] `Set.union`
-     Set.fromList [ bi | bi <- bs, not (any (`isProperSubsetOf` bi) as) ]
+-- | Equations
 
--- find a better name?
--- phi b = max {alpha : Face | phi alpha = b}
--- invII :: II -> Dir -> [Face]
--- invII (Dir b') b       = [ eps | b == b' ]
--- invII (N i) b          = [ singleton i b ]
+-- Invariant: Eqn r s means r >= s
+-- Important: Name > Dir
+data Eqn = Eqn II II
+  deriving (Eq,Ord)
 
--- propInvIIIncomp :: II -> Dir -> Bool
--- propInvIIIncomp phi b = incomparables (invII phi b)
+eqn (r,s) = Eqn (max r s) (min r s)
 
--- | Face
+instance Show Eqn where
+  show (Eqn r s) = "(" ++ show r ++ " = " ++ show s ++ ")"
 
-type Face = (Name,II)
-
-showFace :: Face -> String
-showFace (i,j) = "(" ++ show i ++ " = " ++ show j ++ ")"
-
--- swapFace :: Face -> (Name,Name) -> Face
--- swapFace alpha ij = map (`swapName` ij) alpha
-
--- Check if two faces are compatible
-compatible :: Face -> Face -> Bool
-compatible (i,Dir d) (j,Dir d') | i == j = d == d'
+-- Check if two equations are compatible
+compatible :: Eqn -> Eqn -> Bool
+compatible (Eqn i (Dir d)) (Eqn j (Dir d')) | i == j = d == d'
 compatible _ _ = True
 
--- compatibles :: [Face] -> Bool
--- compatibles []     = True
--- compatibles (x:xs) = all (x `compatible`) xs && compatibles xs
-
-allCompatible :: [Face] -> [(Face,Face)]
+allCompatible :: [Eqn] -> [(Eqn,Eqn)]
 allCompatible []     = []
 allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
 
--- Partial composition operation
--- meet :: Face -> Face -> Face
--- meet = unionWith f
---   where f d1 d2 = if d1 == d2 then d1 else error "meet: incompatible faces"
-
--- meetMaybe :: Face -> Face -> Maybe Face
--- meetMaybe x y = if compatible x y then Just $ meet x y else Nothing
-
--- meets :: [Face] -> [Face] -> [Face]
--- meets xs ys = nub [ meet x y | x <- xs, y <- ys, compatible x y ]
-
--- meetss :: [[Face]] -> [Face]
--- meetss = foldr meets [eps]
-
--- leq :: Face -> Face -> Bool
--- alpha `leq` beta = meetMaybe alpha beta == Just alpha
-
--- comparable :: Face -> Face -> Bool
--- comparable alpha beta = alpha `leq` beta || beta `leq` alpha
-
--- incomparables :: [Face] -> Bool
--- incomparables []     = True
--- incomparables (x:xs) = all (not . (x `comparable`)) xs && incomparables xs
-
-(~>) :: Name -> Dir -> Face -- TODO: Name -> II -> Face ????
-i ~> d = (i,Dir d)
-
--- eps :: Face
--- eps = Map.empty
-
--- minus :: Face -> Face -> Face
--- minus alpha beta = alpha Map.\\ beta
-
-
+-- (~>) :: Name -> Dir -> Face -- TODO: Name -> II -> Face ????
+-- i ~> d = (i,Dir d)
 
 -- | Nominal
 
@@ -187,9 +129,8 @@ class Nominal a where
 --  support :: a -> [Name]
   occurs :: Name -> a -> Bool
 --  occurs x v = x `elem` support v
-  subst   :: a -> Face -> a
+  subst   :: a -> (Name,II) -> a
   swap    :: a -> (Name,Name) -> a
-
 
 fresh :: Nominal a => a -> Name
 fresh _ = gensym [] -- . support
@@ -276,115 +217,91 @@ instance Nominal II where
   -- support (Dir _)        = []
   -- support (Name i)       = [i]
 
-  occurs x u = case u of
-    Dir _ -> False
-    Name i -> x == i
+  occurs x (Dir _)  = False
+  occurs x (Name i) = x == i
 
-  subst (Dir b) (i,r)  = Dir b
+  subst (Dir b)  (i,r) = Dir b
   subst (Name j) (i,r) | i == j    = r
                        | otherwise = Name j
 
-  swap (Dir b) (i,j)  = Dir b
+  swap (Dir b)  (i,j) = Dir b
   swap (Name k) (i,j) | k == i    = Name j
                       | k == j    = Name i
                       | otherwise = Name k
 
-supportII :: II -> [Name]
-supportII (Dir _)        = []
-supportII (Name i)       = [i]
+instance Nominal Eqn where
+  occurs x (Eqn r s) = occurs x r || occurs x s
+  subst (Eqn r s) f = eqn (subst r f, subst s f)
+  swap (Eqn r s) f = eqn (swap r f, swap s f)
 
--- the faces should be incomparable
-data System a = Sys [(Face,a)]
+supportII :: II -> [Name]
+supportII (Dir _)  = []
+supportII (Name i) = [i]
+
+-- Invariant: No false equations; turns into Triv if any true equations.
+data System a = Sys (Map.Map Eqn a)
               | Triv a
   deriving Eq
 
 instance Show a => Show (System a) where
-  show (Sys []) = "[]"
-  show (Sys ts) =
-    "[ " ++ intercalate ", " [ showFace alpha ++ " -> " ++ show u
-                             | (alpha,u) <- ts ] ++ " ]"
-  show (Triv a) = "[ T -> " ++ show a ++ " ]"  -- TODO: Maybe just show a?
+  show (Sys xs) = case Map.toList xs of
+    [] -> "[]"
+    ts -> "[ " ++ intercalate ", " [ show alpha ++ " -> " ++ show u
+                                   | (alpha,u) <- ts ] ++ " ]"
+  show (Triv a) = "[ T -> " ++ show a ++ " ]"
 
-insertSystem :: (Face,a) -> System a -> System a
-insertSystem v (Sys ts) = Sys (v : ts)     -- TODO: maybe check is (alpha,v) occurs in ts?
-insertSystem _ x = x
+-- relies on (and preserves) System invariant
+insertSystem :: (Eqn,a) -> System a -> System a
+insertSystem _       (Triv a) = Triv a
+insertSystem (eqn,a) (Sys xs) = case eqn of
+  -- equation is always false
+  Eqn (Dir One) (Dir Zero) -> Sys xs
+  -- equation is always true
+  Eqn r s | r == s -> Triv a
+  -- otherwise
+  Eqn r s -> Sys (Map.insert eqn a xs)
 
-insertsSystem :: [(Face, a)] -> System a -> System a
-insertsSystem faces us = foldr insertSystem us faces
-
--- joinSystem :: System (System a) -> System a
--- joinSystem tss = mkSystem $
---   [ (alpha `meet` beta,t) | (alpha,ts) <- assocs tss, (beta,t) <- assocs ts ]
-
--- Calculates shape corresponding to (phi=dir)
--- invSystem :: II -> Dir -> System ()
--- invSystem phi dir = mkSystem $ map (,()) $ invII phi dir
+insertsSystem :: [(Eqn,a)] -> System a -> System a
+insertsSystem xs sys = foldr insertSystem sys xs
 
 allSystem :: Name -> System a -> System a
-allSystem i (Sys xs) = Sys (filter (\((j,r),_) -> i /= j && not (occurs i r)) xs)
-allSystem _ x = x
-
--- TODO: adapt
--- transposeSystemAndList :: System [a] -> [b] -> [(System a,b)]
--- transposeSystemAndList _  []      = []
--- transposeSystemAndList tss (u:us) =
---   (map head tss,u):transposeSystemAndList (map tail tss) us
+allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn a -> occurs i eqn) xs)
+allSystem _ (Triv x) = Triv x
 
 instance Nominal a => Nominal (System a) where
-  -- support s = unions (map keys $ keys s)
-  --             `union` support (elems s)
-
-  occurs x (Sys s) = or [ x == i || occurs x r || occurs x a | ((i,r),a) <- s ]
+  occurs x (Sys xs) = Map.foldrWithKey fn False xs
+    where fn eqn a accum = accum || occurs x eqn || occurs x a
   occurs x (Triv a) = occurs x a
 
-  subst (Sys []) (i,r) = Sys []
-  subst (Sys (((j,s),a):xs)) (i,r) = case subst (Sys xs) (i,r) of
-    Triv x -> Triv x
-    Sys xs' -> case (subst (Name j) (i,r),subst s (i,r)) of
-      (x,y) | x == y -> Triv (subst a (i,r))             -- if 0=0, 1=1 or i=i then trivial
-      (Dir _,Dir _) -> Sys xs'                           -- remove 0=1 and 1=0
-      (Dir d,Name x) -> Sys (((x,Dir d),subst a (i,r)) : xs') -- swap direction
-      (Name x,y) -> Sys (((x,y),subst a (i,r)) : xs')    -- good direction
-  subst (Triv a) (i,r) = Triv (subst a (i,r))
+  subst (Sys xs) f = Map.foldrWithKey fn (Sys Map.empty) xs
+    where fn eqn a = insertSystem (subst eqn f,subst a f)
 
-  swap (Sys s) ij = Sys [ ((swapName i ij,swap r ij),swap a ij) | ((i,r),a) <- s ]
+  swap (Sys xs) ij = Map.foldrWithKey fn (Sys Map.empty) xs
+    where fn eqn a = insertSystem (swap eqn ij,swap a ij)
   swap (Triv a) ij = Triv (swap a ij)
 
 -- carve a using the same shape as the system b
+-- relies on Eqn, System invariants
 border :: Nominal a => a -> System b -> System a
-border v (Sys xs) = Sys [ ((i,r),v) | ((i,r),_) <- xs ]
+border v (Sys xs) = Sys (Map.mapWithKey fn xs)
+  where fn (Eqn (Name i) r) _ = subst v (i,r)
+        fn eqn _ = error $ "border: encountered " ++ (show eqn) ++ " in system"
 border v (Triv _) = Triv v
 
 shape :: System a -> System ()
-shape = border ()
-
--- sym :: Nominal a => a -> Name -> a
--- sym a i = act False a (i, NegName i)
+shape (Sys xs) = Sys (Map.map (const ()) xs)
+shape (Triv _) = Triv ()
 
 rename :: Nominal a => a -> (Name, Name) -> a
 rename a (i, j) = swap a (i,j)
 
--- conj, disj :: Nominal a => a -> (Name, Name) -> a
--- conj a (i, j) = act False a (i, Name i :/\: Name j)
--- disj a (i, j) = act False a (i, Name i :\/: Name j)
-
--- leqSystem :: Face -> System a -> Bool
--- alpha `leqSystem` us =
---   not $ Map.null $ filterWithKey (\beta _ -> alpha `leq` beta) us
-
 -- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us
-proj :: (Nominal a, Show a) => System a -> Face -> a
+proj :: (Nominal a, Show a) => System a -> (Name,II) -> a
 proj us ir = case us `subst` ir of
   Triv a -> a
   _ -> error "proj"
 
-  --   | eps `member` usalpha = usalpha ! eps
-  --   | otherwise            =
-  -- error $ "proj: eps not in " ++ show usalpha ++ "\nwhich  is the "
-  --   ++ show alpha ++ "\nface of " ++ show us
-  -- where usalpha = us `face` alpha
-
-domain :: System a -> [Name]
-domain (Triv _) = []
-domain (Sys xs) = [ i | ((i,_),_) <- xs ] ++ [ i | ((_,Name i),_) <- xs ] -- keys . Map.unions . keys
+-- domain :: System a -> [Name]
+-- domain (Triv _) = []
+-- domain (Sys xs) = [ i | ((i,_),_) <- xs ] ++ [ i | ((_,Name i),_) <- xs ]
