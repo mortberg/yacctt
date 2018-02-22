@@ -5,10 +5,10 @@ import Control.Applicative hiding (empty)
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey,elems,keys
-                ,intersection,intersectionWith,intersectionWithKey
-                ,toList,fromList)
-import qualified Data.Map as Map
+-- import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey,elems,keys
+--                 ,intersection,intersectionWith,intersectionWithKey
+--                 ,toList,fromList)
+-- import qualified Data.Map as Map
 import qualified Data.Traversable as T
 
 import Cartesian
@@ -66,10 +66,10 @@ addTypeVal (x,a) (TEnv ns ind rho v) =
   let w@(VVar n _) = mkVarNice ns x a
   in TEnv (n:ns) ind (upd (x,w) rho) v
 
-addSub :: (Name,Formula) -> TEnv -> TEnv
+addSub :: (Name,II) -> TEnv -> TEnv
 addSub iphi (TEnv ns ind rho v) = TEnv ns ind (sub iphi rho) v
 
-addSubs :: [(Name,Formula)] -> TEnv -> TEnv
+addSubs :: [(Name,II)] -> TEnv -> TEnv
 addSubs = flip $ foldr addSub
 
 addType :: (Ident,Ter) -> TEnv -> TEnv
@@ -86,7 +86,7 @@ addTele :: Tele -> TEnv -> TEnv
 addTele xas lenv = foldl (flip addType) lenv xas
 
 faceEnv :: Face -> TEnv -> TEnv
-faceEnv alpha tenv = tenv{env=env tenv `face` alpha}
+faceEnv alpha tenv = tenv{env=env tenv `subst` alpha}
 
 -------------------------------------------------------------------------------
 -- | Various useful functions
@@ -150,7 +150,7 @@ check a t = case (a,t) of
       unless (all (`elem` is) (domain ts)) $
         throwError "names in path label system" -- TODO
       mapM_ checkFresh is
-      let iis = zip is (map Atom is)
+      let iis = zip is (map Name is)
       local (addSubs iis . addTele tele) $ do
         checkSystemWith ts $ \alpha talpha ->
           local (faceEnv alpha) $
@@ -203,14 +203,14 @@ check a t = case (a,t) of
     unless (conv ns a0 u0 && conv ns a1 u1) $
       throwError $ "path endpoints don't match for " ++ show e ++ ", got " ++
                    show (u0,u1) ++ ", but expected " ++ show (a0,a1)
-  (VU,Glue a ts) -> do
-    check VU a
-    rho <- asks env
-    checkGlue (eval rho a) ts
-  (VGlue va ts,GlueElem u us) -> do
-    check va u
-    vu <- evalTyping u
-    checkGlueElem vu ts us
+  -- (VU,Glue a ts) -> do
+  --   check VU a
+  --   rho <- asks env
+  --   checkGlue (eval rho a) ts
+  -- (VGlue va ts,GlueElem u us) -> do
+  --   check va u
+  --   vu <- evalTyping u
+  --   checkGlueElem vu ts us
   -- (VCompU va ves,GlueElem u us) -> do
   --   check va u
   --   vu <- evalTyping u
@@ -255,32 +255,32 @@ checkCompSystem :: System Val -> Typing ()
 checkCompSystem vus = do
   ns <- asks names
   unless (isCompSystem ns vus)
-    (throwError $ "Incompatible system " ++ showSystem vus)
+    (throwError $ "Incompatible system " ++ show vus)
 
 -- Check the values at corresponding faces with a function, assumes
 -- systems have the same faces
 checkSystemsWith :: System a -> System b -> (Face -> a -> b -> Typing c) ->
                     Typing ()
-checkSystemsWith us vs f = sequence_ $ elems $ intersectionWithKey f us vs
+checkSystemsWith us vs f = undefined -- sequence_ $ elems $ intersectionWithKey f us vs
 
 -- Check the faces of a system
 checkSystemWith :: System a -> (Face -> a -> Typing b) -> Typing ()
-checkSystemWith us f = sequence_ $ elems $ mapWithKey f us
+checkSystemWith us f = undefined -- sequence_ $ elems $ mapWithKey f us
 
 -- Check a glueElem
-checkGlueElem :: Val -> System Val -> System Ter -> Typing ()
-checkGlueElem vu ts us = do
-  unless (keys ts == keys us)
-    (throwError ("Keys don't match in " ++ show ts ++ " and " ++ show us))
-  rho <- asks env
-  checkSystemsWith ts us
-    (\alpha vt u -> local (faceEnv alpha) $ check (equivDom vt) u)
-  let vus = evalSystem rho us
-  checkSystemsWith ts vus (\alpha vt vAlpha ->
-    unlessM (app (equivFun vt) vAlpha === (vu `face` alpha)) $
-      throwError $ "Image of glue component " ++ show vAlpha ++
-                   " doesn't match " ++ show vu)
-  checkCompSystem vus
+-- checkGlueElem :: Val -> System Val -> System Ter -> Typing ()
+-- checkGlueElem vu ts us = do
+--   unless (keys ts == keys us)
+--     (throwError ("Keys don't match in " ++ show ts ++ " and " ++ show us))
+--   rho <- asks env
+--   checkSystemsWith ts us
+--     (\alpha vt u -> local (faceEnv alpha) $ check (equivDom vt) u)
+--   let vus = evalSystem rho us
+--   checkSystemsWith ts vus (\alpha vt vAlpha ->
+--     unlessM (app (equivFun vt) vAlpha === (vu `subst` alpha)) $
+--       throwError $ "Image of glue component " ++ show vAlpha ++
+--                    " doesn't match " ++ show vu)
+--   checkCompSystem vus
 
 -- Check a glueElem against VComp _ ves
 -- checkGlueElemU :: Val -> System Val -> System Ter -> Typing ()
@@ -292,16 +292,16 @@ checkGlueElem vu ts us = do
 --     (\alpha ve u -> local (faceEnv alpha) $ check (ve @@ One) u)
 --   let vus = evalSystem rho us
 --   checkSystemsWith ves vus (\alpha ve vAlpha ->
---     unlessM (eqFun ve vAlpha === (vu `face` alpha)) $
+--     unlessM (eqFun ve vAlpha === (vu `subst` alpha)) $
 --       throwError $ "Transport of glueElem (for compU) component " ++ show vAlpha ++
 --                    " doesn't match " ++ show vu)
 --   checkCompSystem vus
 
-checkGlue :: Val -> System Ter -> Typing ()
-checkGlue va ts = do
-  checkSystemWith ts (\alpha tAlpha -> checkEquiv (va `face` alpha) tAlpha)
-  rho <- asks env
-  checkCompSystem (evalSystem rho ts)
+-- checkGlue :: Val -> System Ter -> Typing ()
+-- checkGlue va ts = do
+--   checkSystemWith ts (\alpha tAlpha -> checkEquiv (va `subst` alpha) tAlpha)
+--   rho <- asks env
+--   checkCompSystem (evalSystem rho ts)
 
 -- An iso for a type b is a five-tuple: (a,f,g,s,t)   where
 --  a : U
@@ -314,8 +314,8 @@ mkIso vb = eval rho $
   Sigma $ Lam "a" U $
   Sigma $ Lam "f" (Pi (Lam "_" a b)) $
   Sigma $ Lam "g" (Pi (Lam "_" b a)) $
-  Sigma $ Lam "s" (Pi (Lam "y" b $ PathP (PLam (Name "_") b) (App f (App g y)) y)) $
-    Pi (Lam "x" a $ PathP (PLam (Name "_") a) (App g (App f x)) x)
+  Sigma $ Lam "s" (Pi (Lam "y" b $ PathP (PLam (N "_") b) (App f (App g y)) y)) $
+    Pi (Lam "x" a $ PathP (PLam (N "_") a) (App g (App f x)) x)
   where [a,b,f,g,x,y] = map Var ["a","b","f","g","x","y"]
         rho = upd ("b",vb) emptyEnv
 
@@ -331,9 +331,9 @@ mkEquiv va = eval rho $
   Pi (Lam "x" a $ iscontrfib)
   where [a,b,f,x,y,s,t,z] = map Var ["a","b","f","x","y","s","t","z"]
         rho = upd ("a",va) emptyEnv
-        fib = Sigma $ Lam "y" t (PathP (PLam (Name "_") a) x (App f y))
+        fib = Sigma $ Lam "y" t (PathP (PLam (N "_") a) x (App f y))
         iscontrfib = Sigma $ Lam "s" fib $
-                     Pi $ Lam "z" fib $ PathP (PLam (Name "_") fib) s z
+                     Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) s z
 
 checkEquiv :: Val -> Ter -> Typing ()
 checkEquiv va equiv = check (mkEquiv va) equiv
@@ -351,24 +351,24 @@ checkBranch (PLabel _ tele is ts,nu) f (PBranch c ns js e) g va = do
   -- mapM_ checkFresh js
   let us   = mkVars ns' tele nu
       vus  = map snd us
-      js'  = map Atom js
+      js'  = map Name js
       vts  = evalSystem (subs (zip is js') (upds us nu)) ts
-      vgts = intersectionWith app (border g vts) vts
+      vgts = undefined -- intersectionWith app (border g vts) vts
   local (addSubs (zip js js') . addBranch (zip ns vus) nu) $ do
     check (app f (VPCon c va vus js')) e
     ve  <- evalTyping e -- TODO: combine with next two lines?
-    let veborder = border ve vts
+    let veborder = border ve vts :: System Val
     unlessM (veborder === vgts) $
       throwError $ "Faces in branch for " ++ show c ++ " don't match:"
-                   ++ "\ngot\n" ++ showSystem veborder ++ "\nbut expected\n"
-                   ++ showSystem vgts
+                   ++ "\ngot\n" ++ show veborder ++ "\nbut expected\n"
+                   -- ++ show vgts
 
-checkFormula :: Formula -> Typing ()
-checkFormula phi = do
+checkII :: II -> Typing ()
+checkII phi = do
   rho <- asks env
   let dom = domainEnv rho
-  unless (all (`elem` dom) (supportFormula phi)) $
-    throwError $ "checkFormula: " ++ show phi
+  unless (all (`elem` dom) (supportII phi)) $
+    throwError $ "checkII: " ++ show phi
 
 checkFresh :: Name -> Typing ()
 checkFresh i = do
@@ -381,7 +381,7 @@ checkPLam :: Val -> Ter -> Typing (Val,Val)
 checkPLam v (PLam i a) = do
   rho <- asks env
   -- checkFresh i
-  local (addSub (i,Atom i)) $ check (v @@ i) a
+  local (addSub (i,Name i)) $ check (v @@ i) a
   return (eval (sub (i,Dir 0) rho) a,eval (sub (i,Dir 1) rho) a)
 checkPLam v t = do
   vt <- infer t
@@ -398,18 +398,18 @@ checkPLam v t = do
 checkPLamSystem :: Ter -> Val -> System Ter -> Typing (System Val)
 checkPLamSystem t0 va ps = do
   rho <- asks env
-  v <- T.sequence $ mapWithKey (\alpha pAlpha ->
-    local (faceEnv alpha) $ do
-      rhoAlpha <- asks env
-      (a0,a1)  <- checkPLam (va `face` alpha) pAlpha
-      unlessM (a0 === eval rhoAlpha t0) $
-        throwError $ "Incompatible system " ++ showSystem ps ++
-                     ", component\n " ++ show pAlpha ++
-                     "\nincompatible with\n " ++ show t0 ++
-                     "\na0 = " ++ show a0 ++
-                     "\nt0alpha = " ++ show (eval rhoAlpha t0) ++
-                     "\nva = " ++ show va
-      return a1) ps
+  v <- return undefined -- T.sequence $ mapWithKey (\alpha pAlpha ->
+    -- local (faceEnv alpha) $ do
+    --   rhoAlpha <- asks env
+    --   (a0,a1)  <- checkPLam (va `subst` alpha) pAlpha
+    --   unlessM (a0 === eval rhoAlpha t0) $
+    --     throwError $ "Incompatible system " ++ show ps ++
+    --                  ", component\n " ++ show pAlpha ++
+    --                  "\nincompatible with\n " ++ show t0 ++
+    --                  "\na0 = " ++ show a0 ++
+    --                  "\nt0alpha = " ++ show (eval rhoAlpha t0) ++
+    --                  "\nva = " ++ show va
+    --   return a1) ps
   checkCompSystem (evalSystem rho ps)
   return v
 
@@ -450,68 +450,70 @@ infer e = case e of
   Where t d -> do
     checkDecls d
     local (addDecls d) $ infer t
-  UnGlueElem e a ts -> do
-    check VU (Glue a ts)
-    vgl <- evalTyping (Glue a ts)
-    check vgl e
-    va <- evalTyping a
-    return va
-  AppFormula e phi -> do
-    checkFormula phi
+  -- UnGlueElem e a ts -> do
+  --   check VU (Glue a ts)
+  --   vgl <- evalTyping (Glue a ts)
+  --   check vgl e
+  --   va <- evalTyping a
+  --   return va
+  AppII e phi -> do
+    checkII phi
     t <- infer e
     case t of
       VPathP a _ _ -> return $ a @@ phi
       _ -> throwError (show e ++ " is not a path")
-  HComp a u0 us -> do
-    check VU a
-    va <- evalTyping a
-    check va u0
-    checkPLamSystem u0 (constPath va) us
-    return va
-  HFill a u0 us -> do
-    check VU a
-    va <- evalTyping a
-    check va u0
-    checkPLamSystem u0 (constPath va) us
-    vu0 <- evalTyping u0
-    rho <- asks env
-    let vus = evalSystem rho us
-    return (VPathP (constPath va) vu0 (hCompLine va vu0 vus))
-  Trans a phi u0 -> do
-    (va0, va1) <- checkPLam (constPath VU) a
-    va <- evalTyping a
-    checkFormula phi
-    let phisys = invFormula phi One
-    -- Check that va is constant on phi=1
-    mapM_ (\alpha ->
-              local (faceEnv alpha) $ do
-                unlessM (va `face` alpha === constPath (va0 `face` alpha)) $
-                  throwError $ show va ++ " not constant on "
-                               ++ show phi ++ " for trans")
-      phisys
-    check va0 u0
-    return va1
-  Comp a t0 ps -> do
-    (va0, va1) <- checkPLam (constPath VU) a
-    va <- evalTyping a
-    check va0 t0
-    checkPLamSystem t0 va ps
-    return va1
-  Fill a t0 ps -> do
-    (va0, va1) <- checkPLam (constPath VU) a
-    va <- evalTyping a
-    check va0 t0
-    checkPLamSystem t0 va ps
-    vt  <- evalTyping t0
-    rho <- asks env
-    let vps = evalSystem rho ps
-    return (VPathP va vt (compLine va vt vps))
+
+  -- HComp a u0 us -> do
+  --   check VU a
+  --   va <- evalTyping a
+  --   check va u0
+  --   checkPLamSystem u0 (constPath va) us
+  --   return va
+  -- HFill a u0 us -> do
+  --   check VU a
+  --   va <- evalTyping a
+  --   check va u0
+  --   checkPLamSystem u0 (constPath va) us
+  --   vu0 <- evalTyping u0
+  --   rho <- asks env
+  --   let vus = evalSystem rho us
+  --   return (VPathP (constPath va) vu0 (hCompLine va vu0 vus))
+
+  -- Trans a phi u0 -> do
+  --   (va0, va1) <- checkPLam (constPath VU) a
+  --   va <- evalTyping a
+  --   checkII phi
+  --   let phisys = invII phi One
+  --   -- Check that va is constant on phi=1
+  --   mapM_ (\alpha ->
+  --             local (faceEnv alpha) $ do
+  --               unlessM (va `subst` alpha === constPath (va0 `subst` alpha)) $
+  --                 throwError $ show va ++ " not constant on "
+  --                              ++ show phi ++ " for trans")
+  --     phisys
+  --   check va0 u0
+  --   return va1
+  -- Comp a t0 ps -> do
+  --   (va0, va1) <- checkPLam (constPath VU) a
+  --   va <- evalTyping a
+  --   check va0 t0
+  --   checkPLamSystem t0 va ps
+  --   return va1
+  -- Fill a t0 ps -> do
+  --   (va0, va1) <- checkPLam (constPath VU) a
+  --   va <- evalTyping a
+  --   check va0 t0
+  --   checkPLamSystem t0 va ps
+  --   vt  <- evalTyping t0
+  --   rho <- asks env
+  --   let vps = evalSystem rho ps
+  --   return (VPathP va vt (compLine va vt vps))
   PCon c a es phis -> do
     check VU a
     va <- evalTyping a
     (bs,nu) <- getLblType c va
     checks (bs,nu) es
-    mapM_ checkFormula phis
+    mapM_ checkII phis
     return va
   _ -> throwError ("infer " ++ show e)
 
