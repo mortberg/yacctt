@@ -72,6 +72,17 @@ instance ToII Name where
 instance ToII Dir where
   toII = Dir
 
+-- This is a bit of a hack
+instance Num II where
+  (+) = undefined
+  (*) = undefined
+  abs = undefined
+  signum = undefined
+  negate= undefined
+  fromInteger 0 = Dir Zero
+  fromInteger 1 = Dir One
+  fromInteger _ = error "fromInteger Dir"
+
 -- | Equations
 
 -- Invariant: Eqn r s means r >= s
@@ -94,8 +105,8 @@ allCompatible :: [Eqn] -> [(Eqn,Eqn)]
 allCompatible []     = []
 allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
 
-(~>) :: Name -> Dir -> Eqn
-i ~> d = Eqn (Name i) (Dir d)
+(~>) :: Name -> II -> Eqn
+i ~> d = eqn (Name i,d)
 
 -- | Nominal
 
