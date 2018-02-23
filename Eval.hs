@@ -127,8 +127,8 @@ instance Nominal Val where
          VSnd u                  -> sndVal (subst u (i,r))
          VCon c vs               -> VCon c (subst vs (i,r))
          VPCon c a vs phis       -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
-         VHCom s s' a us u        -> undefined -- hCompLine (subst a (i,r)) (subst u (i,r)) (subst us (i,r))
-         VCoe s s' a u            -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
+         VHCom s s' a us u0 -> hcomLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
+         VCoe s s' a u      -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
          VVar x v                -> VVar x (subst v (i,r))
          VOpaque x v             -> VOpaque x (subst v (i,r))
          VAppII u psi       -> subst u (i,r) @@ subst psi (i,r)
@@ -199,11 +199,10 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   PathP a e0 e1       -> VPathP (eval rho a) (eval rho e0) (eval rho e1)
   PLam i t            -> let j = fresh rho
                          in VPLam j (eval (sub (i,Name j) rho) t)
-  AppII e phi    -> eval rho e @@ evalII rho phi
-  HCom r s a ts t0       -> undefined
---    hCompLine (eval rho a) (eval rho t0) (evalSystem rho ts)
+  AppII e phi -> eval rho e @@ evalII rho phi
+  HCom r s a us u0 ->
+    hcomLine (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
   Coe r s a t       -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
---    transLine (eval rho a) (evalII rho phi) (eval rho t)
   -- Comp a t0 ts        ->
   --   compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
   -- Glue a ts           -> glue (eval rho a) (evalSystem rho ts)
@@ -220,13 +219,16 @@ evalII rho phi = case phi of
   _              -> phi
 
 evalSystem :: Env -> System Ter -> System Val
-evalSystem rho ts = undefined
-  -- let out = concat [ let betas = meetss [ invII (lookName i rho) d
-  --                                       | (i,d) <- assocs alpha ]
-  --                    in [ (beta,eval (rho `face` beta) talpha) | beta <- betas ]
-  --                  | (alpha,talpha) <- assocs ts ]
-  -- in mkSystem out
-
+evalSystem rho (Triv u) = Triv (eval rho u)
+evalSystem rho (Sys us) = Map.foldrWithKey fn (Sys Map.empty) us
+  where
+  -- relies on eqn ordering
+  fn _ _ (Triv u) = Triv u
+  fn (Eqn r s) u (Sys sys) = case eqn (evalII rho r,evalII rho s) of
+    Eqn (Dir One) (Dir Zero) -> Sys sys
+    Eqn r s | r == s -> Triv (eval rho u)
+    Eqn r s -> Sys (Map.insert (Eqn r s) (eval rho u) sys)
+          
 app :: Val -> Val -> Val
 app u v = case (u,v) of
   (Ter (Lam x _ t) e,_) -> eval (upd (x,v) e) t
@@ -293,7 +295,7 @@ inferType v = case v of
     VPathP a _ _ -> a @@ phi
     ty         -> error $ "inferType: expected PathP type for " ++ show v
                   ++ ", got " ++ show ty
-  VHCom r s a _ _ -> undefined -- a
+  VHCom r s a _ _ -> a
   VCoe r s a _ -> a @@ s
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
@@ -315,6 +317,22 @@ v @@ phi -- | isNeutral v
 (@@@) :: Val -> Name -> Val
 (VPLam i u) @@@ j = u `swap` (i,j)
 v @@@ j           = VAppII v (toII j)
+
+
+-------------------------------------------------------------------------------
+-- hcom
+
+hcomLine :: II -> II -> Val -> System Val -> Val -> Val
+hcomLine r s _ _ u0 | r == s = u0
+hcomLine r s a (Triv u) u0 = u @@ s
+hcomLine r s a (Sys us) u0 = hcom i r s a (Sys (Map.map (@@ i) us)) u0
+  where i = fresh (r,s,a,Sys us,u0)
+
+hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
+hcom _ r s _ _ u0 | r == s = u0
+hcom _ r s _ (Triv u) _ = u @@ s
+hcom i r s a (Sys us) u0 = VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+
 
 
 -------------------------------------------------------------------------------
@@ -429,6 +447,7 @@ v @@@ j           = VAppII v (toII j)
 -- fillLine :: Val -> Val -> System Val -> Val
 -- fillLine a u ts = VPLam i $ fill i (a @@ i) u (Map.map (@@ i) ts)
 --   where i = fresh (a,u,ts)
+
 
 
 -----------------------------------------------------------
@@ -732,9 +751,10 @@ class Convertible a where
   conv :: [String] -> a -> a -> Bool
 
 isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Bool
-isCompSystem ns ts = undefined -- and [ conv ns (getFace alpha beta) (getFace beta alpha)
-    --                      | (alpha,beta) <- allCompatible (keys ts) ]
-    -- where getFace a b = face (ts ! a) (b `minus` a)
+isCompSystem ns (Triv _) = True
+isCompSystem ns (Sys us) = and [ conv ns (getFace alpha beta) (getFace beta alpha)
+                               | (alpha,beta) <- allCompatible (keys us) ]
+  where getFace a b = (us ! a) `subst` toSubst b
 
 instance Convertible Env where
   conv ns (Env (rho1,vs1,fs1,os1)) (Env (rho2,vs2,fs2,os2)) =
@@ -788,7 +808,7 @@ instance Convertible Val where
         -- -- TODO: Maybe identify via (- = 1)?  Or change argument to a system..
         -- conv ns (a,invSystem phi One,u) (a',invSystem phi' One,u')
         -- conv ns (a,phi,u) (a',phi',u')
-      (VHCom r s a u ts,VHCom r' s' a' u' ts')    -> undefined -- conv ns (a,u,ts) (a',u',ts')
+      (VHCom r s a us u0,VHCom r' s' a' us' u0') -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
       -- (VGlue v equivs,VGlue v' equivs')   -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')   -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _) -> conv ns u u'
@@ -803,26 +823,35 @@ instance Convertible () where
   conv _ _ _ = True
 
 instance (Convertible a, Convertible b) => Convertible (a, b) where
-  conv ns (u, v) (u', v') = conv ns u u' && conv ns v v'
+  conv ns (u,v) (u',v') = conv ns u u' && conv ns v v'
 
 instance (Convertible a, Convertible b, Convertible c)
       => Convertible (a, b, c) where
-  conv ns (u, v, w) (u', v', w') = conv ns (u,(v,w)) (u',(v',w'))
+  conv ns (u,v,w) (u',v',w') = conv ns (u,(v,w)) (u',(v',w'))
 
 instance (Convertible a,Convertible b,Convertible c,Convertible d)
       => Convertible (a,b,c,d) where
   conv ns (u,v,w,x) (u',v',w',x') = conv ns (u,v,(w,x)) (u',v',(w',x'))
 
+instance (Convertible a,Convertible b,Convertible c,Convertible d,Convertible e)
+      => Convertible (a,b,c,d,e) where
+  conv ns (u,v,w,x,y) (u',v',w',x',y') = conv ns (u,v,w,(x,y)) (u',v',w',(x',y'))
+
+instance (Convertible a,Convertible b,Convertible c,Convertible d,Convertible e,Convertible f)
+      => Convertible (a,b,c,d,e,f) where
+  conv ns (u,v,w,x,y,z) (u',v',w',x',y',z') = conv ns (u,v,w,x,(y,z)) (u',v',w',x',(y',z'))
+
 instance Convertible a => Convertible [a] where
   conv ns us us' = length us == length us' &&
-                  and [conv ns u u' | (u,u') <- zip us us']
+                   and [conv ns u u' | (u,u') <- zip us us']
 
 instance Convertible a => Convertible (System a) where
-  conv ns ts ts' = undefined -- keys ts == keys ts' &&
-                   -- and (elems (intersectionWith (conv ns) ts ts'))
+  conv ns (Triv u) (Triv u') = conv ns u u'
+  conv ns (Sys us) (Sys us') = keys us == keys us' &&
+                               and (elems (intersectionWith (conv ns) us us'))
 
 instance Convertible II where
-  conv _ r s = r == s -- dnf phi == dnf psi
+  conv _ r s = r == s
 
 instance Convertible (Nameless a) where
   conv _ _ _ = True
@@ -873,14 +902,11 @@ instance Normal Ctxt where
   normal _ = id
 
 instance Normal II where
-  normal _ = undefined -- fromDNF . dnf
+  normal _ = id
 
 instance Normal a => Normal (System a) where
-  normal ns = undefined
-
--- Not needed anymore:
--- instance Normal a => Normal (Map k a) where
---   normal ns = Map.map (normal ns)
+  normal ns (Triv u) = Triv (normal ns u)
+  normal ns (Sys us) = Sys (Map.map (normal ns) us)
 
 instance (Normal a,Normal b) => Normal (a,b) where
   normal ns (u,v) = (normal ns u,normal ns v)

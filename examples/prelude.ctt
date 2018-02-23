@@ -22,4 +22,118 @@ transFill (A B : U) (p : Path U A B) (a : A) :
   PathP p a (trans A B p a) = <i> coe 0->i p a
 
 transK (A B : U) (p : Path U A B) (a : A) :
-  Path A a (transNeg A B p (trans A B p a)) = undefined
+  Path A a (transNeg A B p (trans A B p a)) =
+  <i> coe i->0 p (coe 0->i p a)
+
+compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
+  <i> hcom 0->1 A [ (i=0) -> <j> a, (i=1) -> q ] (p @ i)
+
+sym (A : U) (a b : A) (p : Path A a b) : Path A b a =
+  <i> hcom 0->1 A [ (i=0) -> p, (i=1) -> <_> a ] a
+
+prop (A : U) : U = (a b : A) -> Path A a b
+set (A : U) : U = (a b : A) -> prop (Path A a b)
+groupoid (A : U) : U = (a b : A) -> set (Path A a b)
+twogroupoid (A : U) : U = (a b : A) -> groupoid (Path A a b)
+
+-- the collection of all sets
+SET : U = (X:U) * set X
+
+propSet (A : U) (h : prop A) : set A =
+ \(a b : A) (p q : Path A a b) ->
+   <j i> hcom 0->1 A [ (i=0) -> h a a
+                     , (i=1) -> h a b
+                     , (j=0) -> h a (p @ i)
+                     , (j=1) -> h a (q @ i)] a
+
+setGroupoid (A : U) (h : set A) : groupoid A =
+  \(a b : A) -> propSet (Path A a b) (h a b)
+
+groupoidTwoGroupoid (A : U) (h : groupoid A) : twogroupoid A =
+  \(a b : A) -> setGroupoid (Path A a b) (h a b)
+
+propIsProp (A : U) : prop (prop A) =
+  \(f g : prop A) -> <i> \(a b : A) ->
+    propSet A f a b (f a b) (g a b) @ i
+
+setIsProp (A : U) : prop (set A) =
+ \(f g : set A) -> <i> \(a b :A) ->
+   propIsProp (Path A a b) (f a b) (g a b) @ i
+
+PathS (A : U) (P : A -> U) (a0 a1 : A)
+  (p : Path A a0 a1) (u0 : P a0) (u1 : P a1) : U =
+    PathP (<i> P (p @ i)) u0 u1
+
+lemProp (A : U) (h : A -> prop A) : prop A =
+  \(a : A) -> h a a
+
+propPi (A : U) (B : A -> U) (h : (x : A) -> prop (B x))
+       (f0 f1 : (x : A) -> B x) : Path ((x : A) -> B x) f0 f1
+  = <i> \ (x:A) -> (h x (f0 x) (f1 x)) @ i
+
+isContr (A : U) : U = (x : A) * ((y : A) -> Path A x y)
+
+isContrProp (A : U) (h : isContr A) : prop A =
+  \(a b : A) -> <i> hcom 0->1 A [ (i = 0) -> h.2 a, (i = 1) -> h.2 b ] h.1
+
+
+data N0 =
+
+efq (A : U) : N0 -> A = split {}
+neg (A : U) : U = A -> N0
+
+data Unit = tt
+
+propUnit : prop Unit = split
+ tt -> split@((x:Unit) -> Path Unit tt x) with
+  tt -> <i> tt
+
+setUnit : set Unit = propSet Unit propUnit
+
+data or (A B : U) = inl (a : A)
+                  | inr (b : B)
+
+propOr (A B : U) (hA : prop A) (hB : prop B) (h : A -> neg B) : prop (or A B) = split
+    inl a' -> split@((b : or A B) -> Path (or A B) (inl a') b) with
+        inl b' -> <i> inl (hA a' b' @ i)
+        inr b' -> efq (Path (or A B) (inl a') (inr b')) (h a' b')
+    inr a' -> split@((b : or A B) -> Path (or A B) (inr a') b) with
+        inl b' -> efq (Path (or A B) (inr a') (inl b')) (h b' a')
+        inr b' -> <i> inr (hB a' b' @ i)
+
+stable (A:U) : U = neg (neg A) -> A
+
+const (A : U) (f : A -> A) : U = (x y : A) -> Path A (f x) (f y)
+
+exConst (A : U) : U = (f:A -> A) * const A f
+
+propN0 : prop N0 = \ (x y:N0) -> efq (Path N0 x y) x
+
+propNeg (A:U) : prop (neg A) = \ (f g:neg A) -> <i>\(x:A) -> (propN0 (f x) (g x))@i
+
+dNeg (A:U) (a:A) : neg (neg A) = \ (h : neg A) -> h a
+
+dec (A : U) : U = or A (neg A)
+
+propDec (A : U) (h : prop A) : prop (dec A) =
+  propOr A (neg A) h (propNeg A) (\(x : A) (h : neg A) -> h x)
+
+decEqCong (A B : U) (f : A -> B) (g : B -> A) : dec A -> dec B = split
+  inl a -> inl (f a)
+  inr h -> inr (\ (b:B) -> h (g b))
+
+decStable (A:U) : dec A -> stable A = split
+ inl a -> \ (h :neg (neg A)) -> a
+ inr b -> \ (h :neg (neg A)) -> efq A (h b)
+
+decConst (A : U) : dec A -> exConst A = split
+  inl a -> (\ (x:A)  -> a, \ (x y:A) -> refl A a)
+  inr h -> (\ (x:A) -> x, \ (x y:A) -> efq (Path A x y) (h x))
+
+stableConst (A : U) (sA: stable A) : exConst A =
+ (\ (x:A) -> sA (dNeg A x),\ (x y:A) -> <i>sA (propNeg (neg A) (dNeg A x) (dNeg A y) @ i))
+
+discrete (A : U) : U = (a b : A) -> dec (Path A a b)
+
+injective (A B : U) (f : A -> B) : U =
+  (a0 a1 : A) -> Path B (f a0) (f a1) -> Path A a0 a1

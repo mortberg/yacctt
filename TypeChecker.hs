@@ -8,7 +8,7 @@ import Control.Monad.Reader
 -- import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey,elems,keys
 --                 ,intersection,intersectionWith,intersectionWithKey
 --                 ,toList,fromList)
--- import qualified Data.Map as Map
+import qualified Data.Map as Map
 import qualified Data.Traversable as T
 
 import Cartesian
@@ -393,27 +393,29 @@ checkPLam v t = do
       return (a0,a1)
     _ -> throwError $ show vt ++ " is not a path"
 
--- Return system such that:
---   rhoalpha |- p_alpha : Id (va alpha) (t0 rhoalpha) ualpha
--- Moreover, check that the system ps is compatible.
-checkPLamSystem :: Ter -> Val -> System Ter -> Typing (System Val)
-checkPLamSystem t0 va ps = do
+checkPLamSystem :: II -> Ter -> Val -> System Ter -> Typing ()
+checkPLamSystem r u0 va (Sys us) = do
   rho <- asks env
-  v <- return undefined -- T.sequence $ mapWithKey (\alpha pAlpha ->
-    -- local (faceEnv alpha) $ do
-    --   rhoAlpha <- asks env
-    --   (a0,a1)  <- checkPLam (va `subst` alpha) pAlpha
-    --   unlessM (a0 === eval rhoAlpha t0) $
-    --     throwError $ "Incompatible system " ++ show ps ++
-    --                  ", component\n " ++ show pAlpha ++
-    --                  "\nincompatible with\n " ++ show t0 ++
-    --                  "\na0 = " ++ show a0 ++
-    --                  "\nt0alpha = " ++ show (eval rhoAlpha t0) ++
-    --                  "\nva = " ++ show va
-    --   return a1) ps
-  checkCompSystem (evalSystem rho ps)
-  return v
-
+  T.sequence $ Map.mapWithKey (\eqn u ->
+    local (faceEnv eqn) $ do
+      rhoeqn <- asks env
+      checkPLam (va `subst` toSubst eqn) u
+      unlessM (eval rhoeqn u @@ r === eval rhoeqn u0) $
+        throwError $ "Incompatible system " ++ show us ++
+                     ", component\n " ++ show eqn ++
+                     "\nincompatible with\n " ++ show u0 ++
+                     "\na @ r = " ++ show (va @@ r) ++
+                     "\nu0eqn = " ++ show (eval rhoeqn u0) ++
+                     "\nva = " ++ show va) us
+  -- Check that the system ps is compatible.
+  checkCompSystem (evalSystem rho (Sys us))
+checkPLamSystem r u0 va (Triv u) = do
+  rho <- asks env
+  checkPLam va u
+  unlessM (eval rho u @@ r === eval rho u0) $
+    throwError ("Side " ++ show (eval rho u @@ r) ++
+                " incompatible with base " ++ show (eval rho u0))
+  
 checks :: (Tele,Env) -> [Ter] -> Typing ()
 checks ([],_)         []     = return ()
 checks ((x,a):xas,nu) (e:es) = do
@@ -464,7 +466,16 @@ infer e = case e of
       VPathP a _ _ -> return $ a @@ phi
       _ -> throwError (show e ++ " is not a path")
 
-  HCom r s a us u -> undefined
+  HCom r s a us u0 -> do
+    checkII r
+    checkII s
+    check VU a
+    va <- evalTyping a
+    check va u0
+    -- check that it's a system
+    checkPLamSystem r u0 (constPath va) us
+    return va
+    
   -- HComp a u0 us -> do
   --   check VU a
   --   va <- evalTyping a
