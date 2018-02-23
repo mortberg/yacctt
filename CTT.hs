@@ -375,8 +375,8 @@ showTer v = case v of
   PathP e0 e1 e2     -> text "PathP" <+> showTers [e0,e1,e2]
   PLam i e           -> char '<' <> text (show i) <> char '>' <+> showTer e
   AppII e phi   -> showTer1 e <+> char '@' <+> showII phi
-  HCom r s a ts t  -> text "hcom" <+> showII r <+> text "->" <+> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
-  Coe r s e t0     -> text "coe" <+> showII r <+> text "->" <+> showII s <+> showTer1 e <+> showTer1 t0
+  HCom r s a ts t  -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
+  Coe r s e t0     -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
   -- Comp e t ts        -> text "comp" <+> showTers [e,t] <+> text (show ts)
   -- Glue a ts          -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts      -> text "glue" <+> showTer1 a <+> text (show ts)
@@ -420,8 +420,8 @@ showVal v = case v of
   VCon c us         -> text c <+> showVals us
   VPCon c a us phis -> text c <+> braces (showVal a) <+> showVals us
                        <+> hsep (map ((char '@' <+>) . showII) phis)
-  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <+> text "->" <+> showII s <+> showVal v0 <+> text (show vs) <+> showVal v1
-  VCoe r s u v0   -> text "coe" <+> showII r <+> text "->" <+> showII s <+> showVal1 u <+> showVal1 v0
+  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <> text "->" <> showII s <+> showVal v0 <+> text (show vs) <+> showVal v1
+  VCoe r s u v0   -> text "coe" <+> showII r <> text "->" <> showII s <+> showVal1 u <+> showVal1 v0
   VPi a l@(VLam x t b)
     | "_" `isPrefixOf` x -> showVal1 a <+> text "->" <+> showVal1 b
     | otherwise          -> char '(' <> showLam v
