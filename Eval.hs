@@ -47,45 +47,16 @@ lookName i _ = error $ "lookName: not found " ++ show i
 -- Nominal instances
 
 instance Nominal Ctxt where
---  support _ = []
   occurs _ _ = False
   subst e _   = e
   swap e _  = e
 
 instance Nominal Env where
---  support (Env (rho,vs,fs,os)) = support (rho,vs,fs,os)
   occurs x (Env (rho,vs,fs,os)) = occurs x (rho,vs,fs,os)
-  -- Strangely this definition seems to lead to a space leak:
-  -- act b (Env (rho,vs,fs,os)) iphi = Env $ act b (rho,vs,fs,os) iphi
   subst (Env (rho,vs,fs,os)) iphi = Env (rho,subst vs iphi,subst fs iphi,os)
   swap (Env (rho,vs,fs,os)) ij = Env $ swap (rho,vs,fs,os) ij
 
 instance Nominal Val where
-  -- support v = case v of
-  --   VU                      -> []
-  --   Ter _ e                 -> support e
-  --   VPi u v                 -> support [u,v]
-  --   VPathP a v0 v1          -> support [a,v0,v1]
-  --   VPLam i v               -> i `delete` support v
-  --   VSigma u v              -> support (u,v)
-  --   VPair u v               -> support (u,v)
-  --   VFst u                  -> support u
-  --   VSnd u                  -> support u
-  --   VCon _ vs               -> support vs
-  --   VPCon _ a vs phis       -> support (a,vs,phis)
-  --   VHComp a u ts           -> support (a,u,ts)
-  --   VTrans a phi u          -> support (a,phi,u)
-  --   VVar _ v                -> support v
-  --   VOpaque _ v             -> support v
-  --   VApp u v                -> support (u,v)
-  --   VLam _ u v              -> support (u,v)
-  --   VAppII u phi       -> support (u,phi)
-  --   VSplit u v              -> support (u,v)
-  --   VGlue a ts              -> support (a,ts)
-  --   VGlueElem a ts          -> support (a,ts)
-  --   VUnGlueElem a b ts      -> support (a,b,ts)
-  --   VHCompU a ts            -> support (a,ts)
-  --   VUnGlueElemU a b es     -> support (a,b,es)
   occurs x v = case v of
     VU                      -> False
     Ter _ e                 -> occurs x e
@@ -142,7 +113,7 @@ instance Nominal Val where
          -- VHCompU a ts            -> hCompUniv (subst a (i,r)) (subst ts (i,r))
 
   -- This increases efficiency as it won't trigger computation.
-  swap u ij@(i,j) =
+  swap u ij =
     let sw :: Nominal a => a -> a
         sw u = swap u ij
     in case u of
@@ -170,6 +141,113 @@ instance Nominal Val where
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
          -- VUnGlueElemU a b es     -> VUnGlueElemU (sw a) (sw b) (sw es)
          -- VHCompU a ts            -> VHCompU (sw a) (sw ts)
+
+instance Nominal Label where
+  occurs x u = case u of
+    OLabel _ tele -> occurs x (map snd tele)
+    PLabel _ tele ns us -> occurs x (map snd tele) || x `elem` ns || occurs x us
+  subst = undefined
+  swap = undefined
+
+instance Nominal Branch where
+  occurs x b = case b of
+    OBranch _ _ t -> occurs x t
+    PBranch _ _ ns ts -> x `elem` ns || occurs x ts
+  subst b ir@(i,r) = case b of
+    OBranch x y t -> OBranch x y (subst t ir)
+    PBranch x y ns ts | i `elem` ns -> PBranch x y ns ts
+                      | otherwise -> PBranch x y ns (subst ts (i,r))
+  swap = undefined
+
+instance Nominal Decls where
+  occurs x u = case u of
+    MutualDecls _ ds -> occurs x (map snd ds)
+    _ -> False
+  subst u ir = case u of
+    MutualDecls l ds -> MutualDecls l [ (x,subst d ir) | (x,d) <- ds ]
+    _ -> u
+  swap u ij = case u of
+    MutualDecls l ds -> MutualDecls l [ (x,swap d ij) | (x,d) <- ds ]
+    _ -> u
+
+instance Nominal Ter where
+  occurs x t = case t of
+    Pi u             -> occurs x u
+    App u v          -> occurs x (u,v)
+    Lam _ u v        -> occurs x (u,v)
+    Where u ds       -> occurs x (u,ds)
+    Var _            -> False
+    U                -> False
+    Sigma u          -> occurs x u
+    Pair u v         -> occurs x (u,v)
+    Fst u            -> occurs x u
+    Snd u            -> occurs x u
+    Con _ ts         -> occurs x ts
+    PCon _ t ts is   -> occurs x (t:ts) || occurs x is
+    Split _ _ t bs   -> occurs x t || occurs x bs
+    Sum _ _ ls       -> occurs x ls
+    HSum _ _ ls      -> occurs x ls
+    Undef _ t        -> occurs x t
+    PathP u v t      -> occurs x [u,v,t]
+    PLam i v         -> if x == i then False else occurs x v
+    AppII t r        -> occurs x t || occurs x r
+    Coe r s a u      -> occurs x (r,s) || occurs x (a,u)
+    HCom r s a us u0 -> occurs x (r,s) || occurs x (a,u0) || occurs x us
+    x                -> error "missing case in occurs for Nominal Ter"
+
+  subst u (i,r) = case u of
+    Pi u                          -> Pi (subst u (i,r))
+    App u v                       -> App (subst u (i,r)) (subst v (i,r))
+    Lam x u v                     -> Lam x (subst u (i,r)) (subst v (i,r))
+    Where u ds                    -> Where (subst u (i,r)) (subst ds (i,r))
+    Var c                         -> Var c
+    U                             -> U
+    Sigma u                       -> Sigma (subst u (i,r))
+    Pair u v                      -> Pair (subst u (i,r)) (subst v (i,r))
+    Fst u                         -> Fst (subst u (i,r))
+    Snd u                         -> Snd (subst u (i,r))
+    Con c ts                      -> Con c (subst ts (i,r))
+    PCon c t ts is                -> PCon c (subst t (i,r)) (subst ts (i,r)) (subst is (i,r))
+    Split x y t bs                -> Split x y (subst t (i,r)) (subst bs (i,r))
+    Sum x y ls                    -> Sum x y (subst ls (i,r))
+    HSum x y ls                   -> HSum x y (subst ls (i,r))
+    Undef x t                     -> Undef x (subst t (i,r))
+    PathP u v t                   -> PathP (subst u (i,r)) (subst v (i,r)) (subst t (i,r))
+    PLam j v | j == i             -> u
+             | not (j `occurs` r) -> PLam j (subst v (i,r))
+             | otherwise          -> PLam k (subst (v `swap` (j,k)) (i,r))
+      where k = fresh (v,Name i,r)
+    AppII t s                     -> AppII (subst t (i,r)) (subst s (i,r))
+    Coe s s' a u                  ->
+      Coe (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
+    HCom s s' a us u0             ->
+      HCom (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
+    x                             -> error "missing case in subst for Nominal Ter"
+
+  swap u ij = case u of
+    Pi u              -> Pi (swap u ij)
+    App u v           -> App (swap u ij) (swap v ij)
+    Lam x u v         -> Lam x (swap u ij) (swap v ij)
+    Where u ds        -> Where (swap u ij) (swap ds ij)
+    Var c             -> Var c
+    U                 -> U
+    Sigma u           -> Sigma (swap u ij)
+    Pair u v          -> Pair (swap u ij) (swap v ij)
+    Fst u             -> Fst (swap u ij)
+    Snd u             -> Snd (swap u ij)
+    Con c ts          -> Con c (swap ts ij)
+    PCon c t ts is    -> PCon c (swap t ij) (swap ts ij) (swap is ij)
+    Split x y t bs    -> Split x y (swap t ij) (swap bs ij)
+    Sum x y ls        -> Sum x y (swap ls ij)
+    HSum x y ls       -> HSum x y (swap ls ij)
+    Undef x t         -> Undef x (swap t ij)
+    PathP u v t       -> PathP (swap u ij) (swap v ij) (swap t ij)
+    PLam k v          -> PLam (swapName k ij) (swap v ij)
+    AppII t s         -> AppII (swap t ij) (swap s ij)
+    Coe s s' a u      -> Coe (swap s ij) (swap s' ij) (swap a ij) (swap u ij)
+    HCom s s' a us u0 -> HCom (swap s ij) (swap s' ij) (swap a ij) (swap us ij) (swap u0 ij)
+    x                 -> error "missing case in swap for Nominal Ter"
+
 
 -----------------------------------------------------------------------
 -- The evaluator
@@ -218,17 +296,14 @@ evalII rho phi = case phi of
   Name i         -> lookName i rho
   _              -> phi
 
+evalEqn :: Env -> Eqn -> Eqn
+evalEqn rho (Eqn r s) = eqn (evalII rho r,evalII rho s)
+
 evalSystem :: Env -> System Ter -> System Val
 evalSystem rho (Triv u) = Triv (eval rho u)
-evalSystem rho (Sys us) = Map.foldrWithKey fn eps us
-  where
-  -- relies on eqn ordering
-  fn _ _ (Triv u) = Triv u
-  fn (Eqn r s) u (Sys sys) = case eqn (evalII rho r,evalII rho s) of
-    Eqn (Dir One) (Dir Zero) -> Sys sys
-    Eqn r s | r == s -> Triv (eval rho u)
-    Eqn r s -> Sys (Map.insert (Eqn r s) (eval rho u) sys)
-          
+evalSystem rho (Sys us) =
+  Map.foldrWithKey (\e u sys -> insertSystem (evalEqn rho e,eval rho u) sys) eps us
+
 app :: Val -> Val -> Val
 app u v = case (u,v) of
   (Ter (Lam x _ t) e,_) -> eval (upd (x,v) e) t
@@ -329,7 +404,7 @@ com i r s a (Sys us) u0 =
   hcomLine r s
            (a `subst` (i,s))
            (Sys (mapWithKey (\al ual -> coeLine (Name i) s (a `subst` toSubst al) ual) us))
-           (coeLine r s a u0) 
+           (coeLine r s a u0)
 
 comLine :: II -> II -> Val -> System Val -> Val -> Val
 comLine _ s _ (Triv u) _  = u @@ s
@@ -348,13 +423,14 @@ hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
 hcom _ r s _ _ u0 | r == s = u0
 hcom _ r s _ (Triv u) _    = u @@ s
 hcom i r s a (Sys us) u0   = case a of
-  VPathP p v0 v1 -> error "hcom path"
-  VSigma a f -> error "hcom sigma"
-  VU -> error "hcom U"
-  Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
-  Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-  VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-  _ -> error "missing case in hcom"   -- VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  -- VPathP p v0 v1 -> error "hcom path"
+  -- VSigma a f -> error "hcom sigma"
+  -- VU -> error "hcom U"
+  -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
+  -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  -- VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  _ -> -- error "missing case in hcom"
+       VHCom r s a (Sys (Map.map (VPLam i) us)) u0
 
 -------------------------------------------------------------------------------
 -- Composition and filling
@@ -493,9 +569,10 @@ coe i r s a u = case a of
     | n `elem` ["S1","S2","S3"] -> u   -- hardcode hack
     | otherwise -> error "coe hsum"
   -- VTypes
-  _ -> error "missing case in coe" -- VCoe r s (VPLam i a) u
+  _ -> -- error "missing case in coe" --
+       VCoe r s (VPLam i a) u
 
-        
+
 -- Transport and forward
 
 -- transLine :: Val -> II -> Val -> Val
@@ -787,12 +864,14 @@ isCompSystem ns (Triv _) = True
 isCompSystem ns (Sys us) = and [ conv ns (getFace alpha beta) (getFace beta alpha)
                                | (alpha,beta) <- allCompatible (keys us) ]
   where
-    -- TODO: Double check the special cases with diagonal constraints
-    getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
-      | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
-    getFace a@(Eqn (Name k) (Dir d)) (Eqn (Name i) (Name j)) 
-      | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)        
-    getFace a b = (us ! a) `subst` toSubst b
+  getFace a b = us ! a `subst` toSubst (b `subst` toSubst a)
+
+    -- -- TODO: Double check the special cases with diagonal constraints
+    -- getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
+    --   | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
+    -- getFace a@(Eqn (Name k) (Dir d)) (Eqn (Name i) (Name j))
+    --   | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
+    -- getFace a b = (us ! a) `subst` toSubst b
 
 instance Convertible Env where
   conv ns (Env (rho1,vs1,fs1,os1)) (Env (rho2,vs2,fs2,os2)) =

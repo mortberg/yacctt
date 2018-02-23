@@ -15,6 +15,7 @@ import qualified Data.Map as Map
 import Exp.Abs
 import CTT (Ter,Ident,Loc(..),mkApps,mkWheres)
 import qualified CTT
+import qualified Eval
 import qualified Cartesian as C
 
 -- | Useful auxiliary functions
@@ -234,7 +235,7 @@ resolveSystem (System ts) = do
     throwError $ "system contains same face multiple times: " ++
                  show ts'
   -- Note: the symbols in alpha are in scope in u, but they mean 0 or 1
-  return (C.Sys (Map.fromList ts'))
+  return (C.mkSystem ts')
 
 resolveFace :: Face -> Resolver C.Eqn
 resolveFace (Face r s) = curry C.eqn <$> resolveII r <*> resolveII s

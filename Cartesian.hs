@@ -267,7 +267,7 @@ eps :: System a
 eps = Sys (Map.empty)
 
 -- relies on (and preserves) System invariant
-insertSystem :: (Eqn,a) -> System a -> System a
+insertSystem :: Nominal a => (Eqn,a) -> System a -> System a
 insertSystem _       (Triv a) = Triv a
 insertSystem (eqn,a) (Sys xs) = case eqn of
   -- equation is always false
@@ -275,10 +275,13 @@ insertSystem (eqn,a) (Sys xs) = case eqn of
   -- equation is always true
   Eqn r s | r == s -> Triv a
   -- otherwise
-  Eqn r s -> Sys (Map.insert eqn a xs)
+  Eqn r s -> Sys (Map.insert eqn (a `subst` toSubst eqn) xs)
 
-insertsSystem :: [(Eqn,a)] -> System a -> System a
+insertsSystem :: Nominal a => [(Eqn,a)] -> System a -> System a
 insertsSystem xs sys = foldr insertSystem sys xs
+
+mkSystem :: Nominal a => [(Eqn,a)] -> System a
+mkSystem xs = insertsSystem xs eps
 
 allSystem :: Name -> System a -> System a
 allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn a -> occurs i eqn) xs)

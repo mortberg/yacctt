@@ -72,11 +72,15 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
 
 -- Slicker proof of J.
 -- Inspired by https://github.com/RedPRL/sml-redprl/blob/master/example/J.prl
-J (A : U) (a : A) (fam : (x : A) -> Path A a x -> U) (d : fam a (<_> a))
-  (x : A) (p : Path A a x) : fam x p =
-  coe 0->1 (<i> fam (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> p] a)
-                    (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> p] a)) d
+J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
+  (x : A) (p : Path A a x) : C x p =
+  coe 0->1 (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> p] a)
+                  (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> p] a)) d
 
+-- JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
+--   : Path (C a (<_> a)) d (J A a C d a (<_> a)) =
+--   <k> coe 0->k (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> <_> a] a)
+--                       (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> <_> a] a)) d
 
 --- hlevels
 
