@@ -14,13 +14,13 @@ funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
        (p : (x : A) -> Path (B x) (f x) (g x)) :
        Path ((y : A) -> B y) f g = <i> \(a : A) -> (p a) @ i
 
--- Transport can be defined using comp
 trans (A B : U) (p : Path U A B) (a : A) : B = coe 0->1 p a
 transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1->0 p b
 
 transFill (A B : U) (p : Path U A B) (a : A) :
   PathP p a (trans A B p a) = <i> coe 0->i p a
 
+-- This proof is really slick!
 transK (A B : U) (p : Path U A B) (a : A) :
   Path A a (transNeg A B p (trans A B p a)) =
   <i> coe i->0 p (coe 0->i p a)
@@ -30,6 +30,23 @@ compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
 
 sym (A : U) (a b : A) (p : Path A a b) : Path A b a =
   <i> hcom 0->1 A [ (i=0) -> p, (i=1) -> <_> a ] a
+
+
+singl (A : U) (a : A) : U = (x : A) * Path A a x
+
+-- The connection p @ i /\ j
+connAnd (A : U) (a b : A) (p : Path A a b) :
+  PathP (<i> Path A a (p @ i)) (<_> a) p = 
+  <i j> hcom 0->1 A [ (i=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (i=1) -> <k> hcom 1->j A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (j=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (j=1) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    -- With this constraint it is incompatible? 
+                    -- , (i=j) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    ] a
+                    
+contrSingl (A : U) (a b : A) (p : Path A a b) :
+  Path (singl A a) (a,<_> a) (b,p) = <i> (p @ i, connAnd A a b p @ i)
 
 prop (A : U) : U = (a b : A) -> Path A a b
 set (A : U) : U = (a b : A) -> prop (Path A a b)
