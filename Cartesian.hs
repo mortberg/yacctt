@@ -94,8 +94,8 @@ allCompatible :: [Eqn] -> [(Eqn,Eqn)]
 allCompatible []     = []
 allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
 
--- (~>) :: Name -> Dir -> Face -- TODO: Name -> II -> Face ????
--- i ~> d = (i,Dir d)
+(~>) :: Name -> Dir -> Eqn
+i ~> d = Eqn (Name i) (Dir d)
 
 -- | Nominal
 
@@ -251,6 +251,10 @@ instance Show a => Show (System a) where
                                    | (alpha,u) <- ts ] ++ " ]"
   show (Triv a) = "[ T -> " ++ show a ++ " ]"
 
+-- The empty system
+eps :: System a
+eps = Sys (Map.empty)
+
 -- relies on (and preserves) System invariant
 insertSystem :: (Eqn,a) -> System a -> System a
 insertSystem _       (Triv a) = Triv a
@@ -274,10 +278,10 @@ instance Nominal a => Nominal (System a) where
     where fn eqn a accum = accum || occurs x eqn || occurs x a
   occurs x (Triv a) = occurs x a
 
-  subst (Sys xs) f = Map.foldrWithKey fn (Sys Map.empty) xs
+  subst (Sys xs) f = Map.foldrWithKey fn eps xs
     where fn eqn a = insertSystem (subst eqn f,subst a f)
 
-  swap (Sys xs) ij = Map.foldrWithKey fn (Sys Map.empty) xs
+  swap (Sys xs) ij = Map.foldrWithKey fn eps xs
     where fn eqn a = insertSystem (swap eqn ij,swap a ij)
   swap (Triv a) ij = Triv (swap a ij)
 

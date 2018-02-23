@@ -220,7 +220,7 @@ evalII rho phi = case phi of
 
 evalSystem :: Env -> System Ter -> System Val
 evalSystem rho (Triv u) = Triv (eval rho u)
-evalSystem rho (Sys us) = Map.foldrWithKey fn (Sys Map.empty) us
+evalSystem rho (Sys us) = Map.foldrWithKey fn eps us
   where
   -- relies on eqn ordering
   fn _ _ (Triv u) = Triv u
@@ -320,8 +320,24 @@ v @@@ j           = VAppII v (toII j)
 
 
 -------------------------------------------------------------------------------
--- hcom
+-- hcom and com
 
+-- TODO: Double check!
+com :: Name -> II -> II -> Val -> System Val -> Val -> Val
+com _ _ s _ (Triv u) _  = u @@ s
+com i r s a (Sys us) u0 =
+  hcomLine r s
+           (a `subst` (i,s))
+           (Sys (mapWithKey (\al ual -> coeLine (Name i) s (a `subst` toSubst al) ual) us))
+           (coeLine r s a u0) 
+
+comLine :: II -> II -> Val -> System Val -> Val -> Val
+comLine _ s _ (Triv u) _  = u @@ s
+comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
+  where i = fresh (r,s,a,Sys us,u0)
+
+
+-- hcom
 hcomLine :: II -> II -> Val -> System Val -> Val -> Val
 hcomLine r s _ _ u0 | r == s = u0
 hcomLine r s a (Triv u) u0 = u @@ s
@@ -330,10 +346,15 @@ hcomLine r s a (Sys us) u0 = hcom i r s a (Sys (Map.map (@@ i) us)) u0
 
 hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
 hcom _ r s _ _ u0 | r == s = u0
-hcom _ r s _ (Triv u) _ = u @@ s
-hcom i r s a (Sys us) u0 = VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-
-
+hcom _ r s _ (Triv u) _    = u @@ s
+hcom i r s a (Sys us) u0   = case a of
+  VPathP p v0 v1 -> error "hcom path"
+  VSigma a f -> error "hcom sigma"
+  VU -> error "hcom U"
+  Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
+  Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  _ -> error "missing case in hcom"   -- VHCom r s a (Sys (Map.map (VPLam i) us)) u0
 
 -------------------------------------------------------------------------------
 -- Composition and filling
@@ -458,10 +479,21 @@ coeLine r s a u = coe i r s (a @@ i) u
 
 coe :: Name -> II -> II -> Val -> Val -> Val
 coe i r s a u | r == s = u
-              | otherwise = case u of
-                  VPathP p v0 v1 -> error "coe vpath"
-                  _ -> VCoe r s (VPLam i a) u
---                  x -> error ("coe undefined: " ++ show x)
+coe i r s a u = case a of
+  VPathP p v0 v1 ->
+     let j = fresh (Name i,r,s,a,u)
+     in VPLam j $ com i r s (p @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)] eps) (u @@ j)
+  VSigma a f -> error "coe sigma"
+  VPi{} -> undefined -- VTrans (VPLam i a) phi u
+  VU -> u
+  Ter (Sum _ n nass) env
+    | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
+    | otherwise -> error "coe sum"
+  Ter (HSum _ n nass) env
+    | n `elem` ["S1","S2","S3"] -> u   -- hardcode hack
+    | otherwise -> error "coe hsum"
+  -- VTypes
+  _ -> error "missing case in coe" -- VCoe r s (VPLam i a) u
 
         
 -- Transport and forward
