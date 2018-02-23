@@ -46,7 +46,8 @@ sym (A : U) (a b : A) (p : Path A a b) : Path A b a =
 
 singl (A : U) (a : A) : U = (x : A) * Path A a x
 
--- The connection p @ i /\ j
+-- The connection p @ i /\ j.
+-- Inspired by: https://github.com/RedPRL/sml-redprl/blob/master/example/connection.prl
 connAnd (A : U) (a b : A) (p : Path A a b) :
   PathP (<i> Path A a (p @ i)) (<_> a) p = 
   <i j> hcom 0->1 A [ (i=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
@@ -64,6 +65,12 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
     subst (singl A a) T (a, refl A a) (x, p) (contrSingl A a x p) d
       where T (z : singl A a) : U = C (z.1) (z.2)
 
+-- Slicker proof of J.
+-- Inspired by https://github.com/RedPRL/sml-redprl/blob/master/example/J.prl
+J (A : U) (a : A) (fam : (x : A) -> Path A a x -> U) (d : fam a (<_> a))
+  (x : A) (p : Path A a x) : fam x p =
+  coe 0->1 (<i> fam (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> p] a)
+                    (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> p] a)) d
 
 
 --- hlevels
