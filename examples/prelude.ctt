@@ -25,6 +25,18 @@ transK (A B : U) (p : Path U A B) (a : A) :
   Path A a (transNeg A B p (trans A B p a)) =
   <i> coe i->0 p (coe 0->i p a)
 
+
+-- subst can be defined using trans:
+substTrans (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
+  trans (P a) (P b) (mapOnPath A U P a b p) e
+
+-- Or even better using coe directly:
+subst (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
+  coe 0->1 (mapOnPath A U P a b p) e
+
+-- substEq (A : U) (P : A -> U) (a : A) (e : P a)
+--   : Path (P a) e (subst A P a a (refl A a) e) =
+
 compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
   <i> hcom 0->1 A [ (i=0) -> <j> a, (i=1) -> q ] (p @ i)
 
@@ -47,6 +59,15 @@ connAnd (A : U) (a b : A) (p : Path A a b) :
                     
 contrSingl (A : U) (a b : A) (p : Path A a b) :
   Path (singl A a) (a,<_> a) (b,p) = <i> (p @ i, connAnd A a b p @ i)
+
+J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
+  (d : C a (refl A a)) (x : A) (p : Path A a x) : C x p =
+    subst (singl A a) T (a, refl A a) (x, p) (contrSingl A a x p) d
+      where T (z : singl A a) : U = C (z.1) (z.2)
+
+
+
+--- hlevels
 
 prop (A : U) : U = (a b : A) -> Path A a b
 set (A : U) : U = (a b : A) -> prop (Path A a b)
