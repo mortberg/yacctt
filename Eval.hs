@@ -754,7 +754,13 @@ isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Bool
 isCompSystem ns (Triv _) = True
 isCompSystem ns (Sys us) = and [ conv ns (getFace alpha beta) (getFace beta alpha)
                                | (alpha,beta) <- allCompatible (keys us) ]
-  where getFace a b = (us ! a) `subst` toSubst b
+  where
+    -- TODO: Double check the special cases with diagonal constraints
+    getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
+      | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
+    getFace a@(Eqn (Name k) (Dir d)) (Eqn (Name i) (Name j)) 
+      | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)        
+    getFace a b = (us ! a) `subst` toSubst b
 
 instance Convertible Env where
   conv ns (Env (rho1,vs1,fs1,os1)) (Env (rho2,vs2,fs2,os2)) =

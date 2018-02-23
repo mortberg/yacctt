@@ -53,8 +53,7 @@ connAnd (A : U) (a b : A) (p : Path A a b) :
                     , (i=1) -> <k> hcom 1->j A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
                     , (j=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
                     , (j=1) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
-                    -- With this constraint it is incompatible? 
-                    -- , (i=j) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (i=j) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
                     ] a
                     
 contrSingl (A : U) (a b : A) (p : Path A a b) :
