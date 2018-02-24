@@ -422,10 +422,10 @@ comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
 com :: Name -> II -> II -> Val -> System Val -> Val -> Val
 com _ _ s _ (Triv u) _  = u @@ s
 com i r s a (Sys us) u0 =
-  hcomLine r s
-           (a `subst` (i,s))
-           (Sys (mapWithKey (\al ual -> coeLine (Name i) s (a `subst` toSubst al) ual) us))
-           (coeLine r s a u0)
+  hcom i r s
+       (a `subst` (i,s))
+       (Sys (mapWithKey (\al ual -> coe i (Name i) s (a `subst` toSubst al) ual) us))
+       (coe i r s a u0)
 
 -- hcom
 hcomLine :: II -> II -> Val -> System Val -> Val -> Val
@@ -445,16 +445,17 @@ hcom i r s a (Sys us) u0   = case a of
                    (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
                    (u0 @@ j)
   VSigma a b ->
-    let j = Name (fresh (Name i,r,s,a,Sys us,u0))
+    let j = fresh (Name i,r,s,(a,b),Sys us,u0)
         (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
         (u1,u2) = (fstVal u0,sndVal u0)
-        u1fill = hcom i r j a us1 u1
-        u1comp = hcom i r s a us1 u1
-    in VPair u1comp (com i r s (app b u1fill) us2 u2)
+        -- u1fill = hcomLine r (Name j) a us1 u1 -- Maybe?
+        u1fill = hcom i r (Name j) a us1 u1
+        u1hcom = hcom i r s a us1 u1
+    in VPair u1hcom (com i r s (app b u1fill) us2 u2)
   -- VU -> error "hcom U"
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-  -- VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
+  VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
   _ -> -- error "missing case in hcom"
        VHCom r s a (Sys (Map.map (VPLam i) us)) u0
 
