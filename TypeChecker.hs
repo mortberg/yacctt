@@ -467,7 +467,6 @@ infer e = case e of
     case t of
       VPathP a _ _ -> return $ a @@ phi
       _ -> throwError (show e ++ " is not a path")
-
   HCom r s a us u0 -> do
     checkII r
     checkII s
@@ -477,23 +476,6 @@ infer e = case e of
     -- check that it's a system
     checkPLamSystem r u0 (constPath va) us
     return va
-    
-  -- HComp a u0 us -> do
-  --   check VU a
-  --   va <- evalTyping a
-  --   check va u0
-  --   checkPLamSystem u0 (constPath va) us
-  --   return va
-  -- HFill a u0 us -> do
-  --   check VU a
-  --   va <- evalTyping a
-  --   check va u0
-  --   checkPLamSystem u0 (constPath va) us
-  --   vu0 <- evalTyping u0
-  --   rho <- asks env
-  --   let vus = evalSystem rho us
-  --   return (VPathP (constPath va) vu0 (hCompLine va vu0 vus))
-
   Coe r s a u -> do
     checkII r
     checkII s
@@ -501,36 +483,12 @@ infer e = case e of
     va <- evalTyping a
     check (va @@ r) u
     return (va @@ s)
-    
-  -- Trans a phi u0 -> do
-  --   (va0, va1) <- checkPLam (constPath VU) a
-  --   va <- evalTyping a
-  --   checkII phi
-  --   let phisys = invII phi One
-  --   -- Check that va is constant on phi=1
-  --   mapM_ (\alpha ->
-  --             local (substEnv alpha) $ do
-  --               unlessM (va `subst` alpha === constPath (va0 `subst` alpha)) $
-  --                 throwError $ show va ++ " not constant on "
-  --                              ++ show phi ++ " for trans")
-  --     phisys
-  --   check va0 u0
-  --   return va1
   -- Comp a t0 ps -> do
   --   (va0, va1) <- checkPLam (constPath VU) a
   --   va <- evalTyping a
   --   check va0 t0
   --   checkPLamSystem t0 va ps
   --   return va1
-  -- Fill a t0 ps -> do
-  --   (va0, va1) <- checkPLam (constPath VU) a
-  --   va <- evalTyping a
-  --   check va0 t0
-  --   checkPLamSystem t0 va ps
-  --   vt  <- evalTyping t0
-  --   rho <- asks env
-  --   let vps = evalSystem rho ps
-  --   return (VPathP va vt (compLine va vt vps))
   PCon c a es phis -> do
     check VU a
     va <- evalTyping a
