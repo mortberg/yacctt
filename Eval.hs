@@ -448,10 +448,9 @@ hcom i r s a (Sys us) u0   = case a of
     let j = fresh (Name i,r,s,(a,b),Sys us,u0)
         (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
         (u1,u2) = (fstVal u0,sndVal u0)
-        -- u1fill = hcomLine r (Name j) a us1 u1 -- Maybe?
         u1fill = hcom i r (Name j) a us1 u1
         u1hcom = hcom i r s a us1 u1
-    in VPair u1hcom (com i r s (app b u1fill) us2 u2)
+    in VPair u1hcom (com i r s (app b u1fill `swap` (i,j)) us2 u2)
   -- VU -> error "hcom U"
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
