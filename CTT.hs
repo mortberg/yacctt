@@ -420,7 +420,7 @@ showVal v = case v of
   VCon c us         -> text c <+> showVals us
   VPCon c a us phis -> text c <+> braces (showVal a) <+> showVals us
                        <+> hsep (map ((char '@' <+>) . showII) phis)
-  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <> text "->" <> showII s <+> showVal v0 <+> text (show vs) <+> showVal v1
+  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <> text "->" <> showII s <+> showVal1 v0 <+> text (show vs) <+> showVal1 v1
   VCoe r s u v0   -> text "coe" <+> showII r <> text "->" <> showII s <+> showVal1 u <+> showVal1 v0
   VPi a l@(VLam x t b)
     | "_" `isPrefixOf` x -> showVal1 a <+> text "->" <+> showVal1 b
