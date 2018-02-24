@@ -86,8 +86,8 @@ addTele :: Tele -> TEnv -> TEnv
 addTele xas lenv = foldl (flip addType) lenv xas
 
 -- Only works for equations in a system (so of shape (Name,II))
-faceEnv :: Eqn -> TEnv -> TEnv
-faceEnv ir tenv = tenv{env=env tenv `subst` toSubst ir}
+substEnv :: Eqn -> TEnv -> TEnv
+substEnv ir tenv = tenv{env=env tenv `subst` toSubst ir}
 
 -------------------------------------------------------------------------------
 -- | Various useful functions
@@ -154,7 +154,7 @@ check a t = case (a,t) of
       let iis = zip is (map Name is)
       local (addSubs iis . addTele tele) $ do
         checkSystemWith ts $ \alpha talpha ->
-          local (faceEnv alpha) $
+          local (substEnv alpha) $
             -- NB: the type doesn't depend on is
             check (Ter t rho) talpha
         rho' <- asks env
@@ -275,7 +275,7 @@ checkSystemWith us f = undefined -- sequence_ $ elems $ mapWithKey f us
 --     (throwError ("Keys don't match in " ++ show ts ++ " and " ++ show us))
 --   rho <- asks env
 --   checkSystemsWith ts us
---     (\alpha vt u -> local (faceEnv alpha) $ check (equivDom vt) u)
+--     (\alpha vt u -> local (substEnv alpha) $ check (equivDom vt) u)
 --   let vus = evalSystem rho us
 --   checkSystemsWith ts vus (\alpha vt vAlpha ->
 --     unlessM (app (equivFun vt) vAlpha === (vu `subst` alpha)) $
@@ -290,7 +290,7 @@ checkSystemWith us f = undefined -- sequence_ $ elems $ mapWithKey f us
 --     (throwError ("Keys don't match in " ++ show ves ++ " and " ++ show us))
 --   rho <- asks env
 --   checkSystemsWith ves us
---     (\alpha ve u -> local (faceEnv alpha) $ check (ve @@ One) u)
+--     (\alpha ve u -> local (substEnv alpha) $ check (ve @@ One) u)
 --   let vus = evalSystem rho us
 --   checkSystemsWith ves vus (\alpha ve vAlpha ->
 --     unlessM (eqFun ve vAlpha === (vu `subst` alpha)) $
@@ -397,7 +397,7 @@ checkPLamSystem :: II -> Ter -> Val -> System Ter -> Typing ()
 checkPLamSystem r u0 va (Sys us) = do
   rho <- asks env
   T.sequence $ Map.mapWithKey (\eqn u ->
-    local (faceEnv eqn) $ do
+    local (substEnv eqn) $ do
       rhoeqn <- asks env
       checkPLam (va `subst` toSubst eqn) u
       unlessM (eval rhoeqn u @@ r === eval rhoeqn u0) $
@@ -507,7 +507,7 @@ infer e = case e of
   --   let phisys = invII phi One
   --   -- Check that va is constant on phi=1
   --   mapM_ (\alpha ->
-  --             local (faceEnv alpha) $ do
+  --             local (substEnv alpha) $ do
   --               unlessM (va `subst` alpha === constPath (va0 `subst` alpha)) $
   --                 throwError $ show va ++ " not constant on "
   --                              ++ show phi ++ " for trans")
