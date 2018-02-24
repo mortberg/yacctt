@@ -260,13 +260,15 @@ checkCompSystem vus = do
 
 -- Check the values at corresponding faces with a function, assumes
 -- systems have the same faces
-checkSystemsWith :: System a -> System b -> (Eqn -> a -> b -> Typing c) ->
-                    Typing ()
-checkSystemsWith us vs f = undefined -- sequence_ $ elems $ intersectionWithKey f us vs
+checkSystemsWith :: (Show a, Show b) => System a -> System b -> (Eqn -> a -> b -> Typing c) -> Typing ()
+checkSystemsWith (Sys us) (Sys vs) f = sequence_ $ Map.elems $ Map.intersectionWithKey f us vs
+checkSystemsWith (Triv u) (Triv v) f = f (eqn (0,0)) u v >> return () -- TODO: Does it make sense to use the trivial equation here?
+checkSystemsWith x y  _= throwError $ "checkSystemsWith: cannot compare " ++ show x ++ " and " ++ show y
 
 -- Check the faces of a system
 checkSystemWith :: System a -> (Eqn -> a -> Typing b) -> Typing ()
-checkSystemWith us f = undefined -- sequence_ $ elems $ mapWithKey f us
+checkSystemWith (Sys us) f = sequence_ $ Map.elems $ Map.mapWithKey f us
+checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make sense to use the trivial equation here?
 
 -- Check a glueElem
 -- checkGlueElem :: Val -> System Val -> System Ter -> Typing ()
