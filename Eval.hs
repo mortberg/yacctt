@@ -234,7 +234,7 @@ instance Nominal Ter where
     HCom s s' a us u0             ->
       HCom (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
     Hole x                        -> Hole x
-    x                             -> error $ "missing case in subst for Nominal Ter: " ++ show x
+--    x                             -> error $ "missing case in subst for Nominal Ter: " ++ show x
 
   swap u ij = case u of
     Pi u              -> Pi (swap u ij)
@@ -341,10 +341,13 @@ app u v = case (u,v) of
         w = coe j s (Name i) aij v
         w0 = coe j s r aij v
     in coe j r s (app bij w) (app u0 w0)
-  (VHCom r s (VPi a f) u0 us, v) -> undefined
-    -- let i = fresh (u,v)
-    -- in hComp i (app f v) (app u0 v)
-    --       (mapWithKey (\al ual -> app (ual @@ i) (v `face` al)) us)
+  (VHCom r s (VPi a b) (Sys us) u0, v) -> 
+    let i = fresh (u,v)
+    in hcom i r s
+            (app b v)
+            (Sys (Map.mapWithKey (\al ual -> app (ual @@ i) (v `subst` toSubst al)) us))
+            (app u0 v)
+  (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
 --  _ | isNeutral u       -> VApp u v
   _                     -> VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
 
@@ -415,6 +418,7 @@ comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
   where i = fresh (r,s,a,Sys us,u0)
 
 -- TODO: Double check!
+-- i is the dimension that a and  us depends on
 com :: Name -> II -> II -> Val -> System Val -> Val -> Val
 com _ _ s _ (Triv u) _  = u @@ s
 com i r s a (Sys us) u0 =
@@ -430,12 +434,23 @@ hcomLine r s a (Triv u) u0 = u @@ s
 hcomLine r s a (Sys us) u0 = hcom i r s a (Sys (Map.map (@@ i) us)) u0
   where i = fresh (r,s,a,Sys us,u0)
 
+-- i is the dimension that us depends on
 hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
 hcom _ r s _ _ u0 | r == s = u0
 hcom _ r s _ (Triv u) _    = u @@ s
 hcom i r s a (Sys us) u0   = case a of
-  -- VPathP p v0 v1 -> error "hcom path"
-  -- VSigma a f -> error "hcom sigma"
+  VPathP p v0 v1 ->
+    let j = fresh (Name i,r,s,a,Sys us,u0)
+    in VPLam j $ hcom i r s (p @@ j)
+                   (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
+                   (u0 @@ j)
+  VSigma a b ->
+    let j = Name (fresh (Name i,r,s,a,Sys us,u0))
+        (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
+        (u1,u2) = (fstVal u0,sndVal u0)
+        u1fill = hcom i r j a us1 u1
+        u1comp = hcom i r s a us1 u1
+    in VPair u1comp (com i r s (app b u1fill) us2 u2)
   -- VU -> error "hcom U"
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
