@@ -62,6 +62,15 @@ connAnd (A : U) (a b : A) (p : Path A a b) :
 connAndDiag (A : U) (a b : A) (p : Path A a b) :
   Path (Path A a b) p (<i> connAnd A a b p @ i @ i) = <_> p
 
+connOr (A : U) (a b : A) (p : Path A a b) :
+  PathP (<i> Path A (p @ i) b) p (<_> b) =
+  <i j> hcom 1->0 A [ (i=0) -> <k> hcom 0->j A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+                    , (i=1) -> <k> hcom 0->1 A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+                    , (j=0) -> <k> hcom 0->i A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+                    , (j=1) -> <k> hcom 0->1 A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+                    , (i=j) -> <k> hcom 0->i A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+                    ] b
+
 contrSingl (A : U) (a b : A) (p : Path A a b) :
   Path (singl A a) (a,<_> a) (b,p) = <i> (p @ i, connAnd A a b p @ i)
 
@@ -137,7 +146,38 @@ isContr (A : U) : U = (x : A) * ((y : A) -> Path A x y)
 isContrProp (A : U) (h : isContr A) : prop A =
   \(a b : A) -> <i> hcom 0->1 A [ (i = 0) -> h.2 a, (i = 1) -> h.2 b ] h.1
 
+-- Can we do this without connections?
+propIsContr (A : U) (z0 z1 : isContr A) : Path (isContr A) z0 z1 =
+ <j> (p0 a1 @ j
+     ,\(x : A) -> <i> hcom 0->1 A
+                              [ (i=0) -> <k> p0 a1 @ j
+                              , (i=1) -> <k> connOr A a0 x (p0 x) @ j @ k
+                              , (j=0) -> <k> connAnd A a0 x (p0 x) @ i @ k
+                              , (j=1) -> <k> p1 x @ i ]
+                              (lem1 x@i@j))
+ where
+  a0 : A = z0.1
+  p0 : (x : A) -> Path A a0 x = z0.2
+  a1 : A = z1.1
+  p1 : (x : A) -> Path A a1 x = z1.2
+  lem1 (x : A) : PathP (<i> Path A a0 (p1 x @ i)) (p0 a1) (p0 x) =
+    <i j> p0 (p1 x @ i) @ j
 
+
+fiber (A B : U) (f : A -> B) (y : B) : U =
+  (x : A) * Path B y (f x)
+
+isEquiv (A B : U) (f : A -> B) : U = (y : B) -> isContr (fiber A B f y)
+
+equiv (A B : U) : U = (f : A -> B) * isEquiv A B f
+
+propIsEquiv (A B : U) (f : A -> B)
+  : prop (isEquiv A B f) =
+  \ (u0 u1:isEquiv A B f) ->
+     <i> \ (y:B) -> propIsContr (fiber A B f y) (u0 y) (u1 y) @ i
+
+---
+{-
 data N0 =
 
 efq (A : U) : N0 -> A = split {}
@@ -198,3 +238,4 @@ discrete (A : U) : U = (a b : A) -> dec (Path A a b)
 
 injective (A B : U) (f : A -> B) : U =
   (a0 a1 : A) -> Path B (f a0) (f a1) -> Path A a0 a1
+-}

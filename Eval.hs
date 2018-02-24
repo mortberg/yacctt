@@ -233,7 +233,8 @@ instance Nominal Ter where
       Coe (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
     HCom s s' a us u0             ->
       HCom (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
-    x                             -> error "missing case in subst for Nominal Ter"
+    Hole x                        -> Hole x
+    x                             -> error $ "missing case in subst for Nominal Ter: " ++ show x
 
   swap u ij = case u of
     Pi u              -> Pi (swap u ij)
@@ -564,6 +565,7 @@ coeLine :: II -> II -> Val -> Val -> Val
 coeLine r s a u = coe i r s (a @@ i) u
   where i = fresh (r,s,a,u)
 
+-- i is the dimension on which a depends
 coe :: Name -> II -> II -> Val -> Val -> Val
 coe i r s a u | r == s = u
 coe i r s a u = case a of
@@ -572,7 +574,7 @@ coe i r s a u = case a of
     in VPLam j $ com i r s (a @@ j) (mkSystem [(j ~> 0,v0),(j ~> 1,v1)]) (u @@ j)
   VSigma a b -> 
     let (u1,u2) = (fstVal u, sndVal u)
-        u1'     = coeLine r (Name i) a u1 -- Maybe coe?
+        u1'     = coeLine r (Name i) a u1 -- Maybe coe with a fresh j?
     in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
   VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
