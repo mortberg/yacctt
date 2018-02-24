@@ -146,18 +146,29 @@ instance Nominal Label where
   occurs x u = case u of
     OLabel _ tele -> occurs x (map snd tele)
     PLabel _ tele ns us -> occurs x (map snd tele) || x `elem` ns || occurs x us
-  subst = undefined
-  swap = undefined
+  subst u ir@(i,r) = case u of
+    OLabel x tele -> OLabel x [ (l,subst y ir) | (l,y) <- tele ]
+    PLabel x tele ns us
+      | i `elem` ns -> u
+      | otherwise -> PLabel x [ (l,subst y ir) | (l,y) <- tele ] ns (subst us ir)
+  swap u ij = case u of
+    OLabel x tele -> OLabel x [ (l,swap y ij) | (l,y) <- tele ]
+    PLabel x tele ns us ->
+      PLabel x [ (l,swap y ij) | (l,y) <- tele ] (map (flip swapName ij) ns) (swap us ij)
 
 instance Nominal Branch where
-  occurs x b = case b of
+  occurs x u = case u of
     OBranch _ _ t -> occurs x t
     PBranch _ _ ns ts -> x `elem` ns || occurs x ts
-  subst b ir@(i,r) = case b of
+  subst u ir@(i,r) = case u of
     OBranch x y t -> OBranch x y (subst t ir)
-    PBranch x y ns ts | i `elem` ns -> PBranch x y ns ts
-                      | otherwise -> PBranch x y ns (subst ts (i,r))
-  swap = undefined
+    PBranch x y ns ts
+      | i `elem` ns -> u
+      | otherwise -> PBranch x y ns (subst ts (i,r))
+  swap u ij = case u of
+    OBranch x y t -> OBranch x y (swap t ij)
+    PBranch x y ns ts ->
+      PBranch x y (map (flip swapName ij) ns) (swap ts ij)
 
 instance Nominal Decls where
   occurs x u = case u of
