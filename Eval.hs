@@ -466,7 +466,7 @@ hcom i r s a (Sys us) u0   = case a of
 --   where i = fresh (a,u,us)
 
 -- hFill :: Name -> Val -> Val -> System Val -> Val
--- hFill i a u us = hComp j a u (insertSystem (i ~> 0) u $ us `conj` (i,j))
+-- hFill i a u us = hComp j a u (insertSystem (i~>0) u $ us `conj` (i,j))
 --   where j = fresh (Atom i,a,u,us)
 
 -- hFillLine :: Val -> Val -> System Val -> Val
@@ -474,10 +474,10 @@ hcom i r s a (Sys us) u0   = case a of
 --   where i = fresh (a,u,us)
 
 -- hComp :: Name -> Val -> Val -> System Val -> Val
--- hComp i a u us | eps `member` us = (us ! eps) `face` (i ~> 1)
+-- hComp i a u us | eps `member` us = (us ! eps) `face` (i~>1)
 -- hComp i a u us = case a of
 --   VPathP p v0 v1 -> let j = fresh (Atom i,a,u,us) in
---     VPLam j $ hComp i (p @@ j) (u @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)]
+--     VPLam j $ hComp i (p @@ j) (u @@ j) (insertsSystem [(j~>0,v0),(j~>1,v1)]
 --                                          (Map.map (@@ j) us))
 --   VSigma a f -> let (us1, us2) = (Map.map fstVal us, Map.map sndVal us)
 --                     (u1, u2) = (fstVal u, sndVal u)
@@ -537,9 +537,9 @@ hcom i r s a (Sys us) u0   = case a of
 -- fwd i a phi u = trans i (act False a (i,phi `orII` Atom i)) phi u
 
 -- comp :: Name -> Val -> Val -> System Val -> Val
--- -- comp i a u us = hComp i (a `face` (i ~> 1)) (fwd i a (Dir Zero) u) fwdius
+-- -- comp i a u us = hComp i (a `face` (i~>1)) (fwd i a (Dir Zero) u) fwdius
 -- --  where fwdius = mapWithKey (\al ual -> fwd i (a `face` al) (Atom i) ual) us
--- comp i a u us = hComp j (a `face` (i ~> 1)) (fwd i a (Dir Zero) u) fwdius
+-- comp i a u us = hComp j (a `face` (i~>1)) (fwd i a (Dir Zero) u) fwdius
 --   where j = fresh (Atom i,a,u,us)
 --         fwdius = mapWithKey (\al ual -> fwd i (a `face` al) (Atom j) (ual  `swap` (i,j))) us
 
@@ -561,7 +561,7 @@ hcom i r s a (Sys us) u0   = case a of
 
 -- fill :: Name -> Val -> Val -> System Val -> Val
 -- fill i a u ts =
---   comp j (a `conj` (i,j)) u (insertSystem (i ~> 0) u (ts `conj` (i,j)))
+--   comp j (a `conj` (i,j)) u (insertSystem (i~>0) u (ts `conj` (i,j)))
 --   where j = fresh (Atom i,a,u,ts)
 
 -- fillNeg :: Name -> Val -> Val -> System Val -> Val
@@ -586,7 +586,7 @@ coe i r s a u | r == s = u
 coe i r s a u = case a of
   VPathP a v0 v1 ->
     let j = fresh (Name i,r,s,a,u)
-    in VPLam j $ com i r s (a @@ j) (mkSystem [(j ~> 0,v0),(j ~> 1,v1)]) (u @@ j)
+    in VPLam j $ com i r s (a @@ j) (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
   VSigma a b -> 
     let (u1,u2) = (fstVal u, sndVal u)
         u1'     = coeLine r (Name i) a u1 -- Maybe coe with a fresh j?
@@ -618,7 +618,7 @@ coe i r s a u = case a of
 -- trans i a (Dir One) u = u
 -- trans i a phi u = case a of
 --   VPathP p v0 v1 -> let j = fresh (Atom i,a,phi,u) in
---     VPLam j $ comp i (p @@ j) (u @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)]
+--     VPLam j $ comp i (p @@ j) (u @@ j) (insertsSystem [(j~>0,v0),(j~>1,v1)]
 --                                          (border (u @@ j) (invSystem phi One)))
 --   VSigma a f ->
 --     let (u1,u2) = (fstVal u, sndVal u)
@@ -626,9 +626,9 @@ coe i r s a u = case a of
 --     in VPair (trans i a phi u1) (trans i (app f u1f) phi u2)
 --   VPi{} -> VTrans (VPLam i a) phi u
 --   VU -> u
---   -- VGlue b equivs -> -- | not (eps `notMember` (equivs `face` (i ~> 0)) && isNeutral u) ->
+--   -- VGlue b equivs -> -- | not (eps `notMember` (equivs `face` (i~>0)) && isNeutral u) ->
 --   --   transGlue i b equivs phi u
---   -- VHCompU b es -> -- | not (eps `notMember` (es `face` (i ~> 0)) && isNeutral u) ->
+--   -- VHCompU b es -> -- | not (eps `notMember` (es `face` (i~>0)) && isNeutral u) ->
 --   --   transHCompU i b es phi u
 --   Ter (Sum _ n nass) env
 --     | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
@@ -645,7 +645,7 @@ coe i r s a u = case a of
 --       Nothing -> error $ "trans: missing constructor in hsum " ++ n
 --     VPCon n _ us psis -> case lookupPLabel n nass of
 --       Just (tele,is,es) ->
---         let ai1  = a `face` (i ~> 1)
+--         let ai1  = a `face` (i~>1)
 --             vs   = transFills i tele env phi us
 --             env' = subs (zip is psis) (updsTele tele vs env)
 --             ves  = evalSystem env' es
@@ -659,7 +659,7 @@ coe i r s a u = case a of
 --            --hComp i ai1 pc ((ves' `sym` i) `unionSystem` uphi)
 --       Nothing -> error $ "trans: missing path constructor in hsum " ++ n
 --     VHCom r s _ v vs -> undefined -- let j = fresh (Atom i,a,phi,u) in
---       -- hComp j (a `face` (i ~> 1)) (trans i a phi v)
+--       -- hComp j (a `face` (i~>1)) (trans i a phi v)
 --       --   (mapWithKey (\al val ->
 --       --                 trans i (a `face` al) (phi `face` al) (val @@ j)) vs)
 --     _ -> undefined -- VTrans (VPLam i a) phi u
@@ -766,8 +766,8 @@ equivContr = sndVal . sndVal
 -- transGlue :: Name -> Val -> System Val -> II -> Val -> Val
 -- transGlue i a equivs psi u0 = glueElem v1' t1s'
 --   where
---     v0 = unGlue u0 (a `face` (i ~> 0)) (equivs `face` (i ~> 0))
---     ai1 = a `face` (i ~> 1)
+--     v0 = unGlue u0 (a `face` (i~>0)) (equivs `face` (i~>0))
+--     ai1 = a `face` (i~>1)
 --     alliequivs = allSystem i equivs
 --     psisys = invSystem psi One -- (psi = 1) : FF
 --     t1s = mapWithKey
@@ -788,7 +788,7 @@ equivContr = sndVal . sndVal
 --                      extend (mkFiberType (ai1 `face` al) (v1 `face` al) wal)
 --                        (app (equivContr wal) (v1 `face` al))
 --                        (fibersys `face` al))
---                   (equivs `face` (i ~> 1))
+--                   (equivs `face` (i~>1))
 
 --     t1s' = Map.map fstVal fibersys'
 --     -- no need for a fresh name; take i
@@ -807,7 +807,7 @@ mkFiberType a x equiv = eval rho $
 -- pathComp :: Name -> Val -> Val -> Val -> System Val -> Val
 -- pathComp i a u0 u' us = VPLam j $ comp i a u0 us'
 --   where j   = fresh (Atom i,a,us,u0,u')
---         us' = insertsSystem [(j ~> 1, u')] us
+--         us' = insertsSystem [(j~>1, u')] us
 
 -------------------------------------------------------------------------------
 -- | Composition in the Universe
@@ -829,8 +829,8 @@ mkFiberType a x equiv = eval rho $
 -- transHCompU :: Name -> Val -> System Val -> II -> Val -> Val
 -- transHCompU i a es psi u0 = glueElem v1' t1s'
 --   where
---     v0 = unGlueU u0 (a `face` (i ~> 0)) (es `face` (i ~> 0))
---     ai1 = a `face` (i ~> 1)
+--     v0 = unGlueU u0 (a `face` (i~>0)) (es `face` (i~>0))
+--     ai1 = a `face` (i~>1)
 --     allies = allSystem i es
 --     psisys = invSystem psi One -- (psi = 1) : FF
 --     t1s = mapWithKey
@@ -849,7 +849,7 @@ mkFiberType a x equiv = eval rho $
 --     fibersys' = mapWithKey
 --                   (\al eal ->
 --                      lemEq eal (v1 `face` al) (fibersys `face` al))
---                   (es `face` (i ~> 1))
+--                   (es `face` (i~>1))
 
 --     t1s' = Map.map fst fibersys'
 --     -- no need for a fresh name; take i
@@ -879,8 +879,8 @@ mkFiberType a x equiv = eval rho $
 --    p1 = hFill i ta (trans i (eq @@ i) (Dir Zero) b) p1s
 
 --    thetas' = insertsSystem
---                [ (i ~> 0,transFill j (eq @@ j) (Dir Zero) b)
---                , (i ~> 1,transFillNeg j (eq @@ j) (Dir Zero) a)]
+--                [ (i~>0,transFill j (eq @@ j) (Dir Zero) b)
+--                , (i~>1,transFillNeg j (eq @@ j) (Dir Zero) a)]
 --                thetas
 
 
