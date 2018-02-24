@@ -334,12 +334,12 @@ app u v = case (u,v) of
     -- _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
                     -> VSplit u v
-  (VCoe r s (VPLam i (VPi a f)) u0, v) -> undefined
-    -- let j = fresh (u,v)
-    --     (aij,fij) = (a,f) `swap` (i,j)
-    --     w = transFillNeg j aij phi v
-    --     w0 = transNeg j aij phi v  -- w0 = w `face` (j ~> 0)
-    -- in trans j (app fij w) phi (app u0 w0)
+  (VCoe r s (VPLam i (VPi a b)) u0, v) ->
+    let j = fresh (u,v)
+        (aij,bij) = (a,b) `swap` (i,j)
+        w = coe j s (Name i) aij v
+        w0 = coe j s r aij v
+    in coe j r s (app bij w) (app u0 w0)
   (VHCom r s (VPi a f) u0 us, v) -> undefined
     -- let i = fresh (u,v)
     -- in hComp i (app f v) (app u0 v)
@@ -406,7 +406,12 @@ v @@@ j           = VAppII v (toII j)
 
 
 -------------------------------------------------------------------------------
--- hcom and com
+-- com and hcom
+
+comLine :: II -> II -> Val -> System Val -> Val -> Val
+comLine _ s _ (Triv u) _  = u @@ s
+comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
+  where i = fresh (r,s,a,Sys us,u0)
 
 -- TODO: Double check!
 com :: Name -> II -> II -> Val -> System Val -> Val -> Val
@@ -416,12 +421,6 @@ com i r s a (Sys us) u0 =
            (a `subst` (i,s))
            (Sys (mapWithKey (\al ual -> coeLine (Name i) s (a `subst` toSubst al) ual) us))
            (coeLine r s a u0)
-
-comLine :: II -> II -> Val -> System Val -> Val -> Val
-comLine _ s _ (Triv u) _  = u @@ s
-comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
-  where i = fresh (r,s,a,Sys us,u0)
-
 
 -- hcom
 hcomLine :: II -> II -> Val -> System Val -> Val -> Val
@@ -560,6 +559,7 @@ hcom i r s a (Sys us) u0   = case a of
 
 -----------------------------------------------------------
 -- Coe
+
 coeLine :: II -> II -> Val -> Val -> Val
 coeLine r s a u = coe i r s (a @@ i) u
   where i = fresh (r,s,a,u)
@@ -567,11 +567,14 @@ coeLine r s a u = coe i r s (a @@ i) u
 coe :: Name -> II -> II -> Val -> Val -> Val
 coe i r s a u | r == s = u
 coe i r s a u = case a of
-  VPathP p v0 v1 ->
-     let j = fresh (Name i,r,s,a,u)
-     in VPLam j $ com i r s (p @@ j) (insertsSystem [(j ~> 0,v0),(j ~> 1,v1)] eps) (u @@ j)
-  VSigma a f -> error "coe sigma"
-  VPi{} -> undefined -- VTrans (VPLam i a) phi u
+  VPathP a v0 v1 ->
+    let j = fresh (Name i,r,s,a,u)
+    in VPLam j $ com i r s (a @@ j) (mkSystem [(j ~> 0,v0),(j ~> 1,v1)]) (u @@ j)
+  VSigma a b -> 
+    let (u1,u2) = (fstVal u, sndVal u)
+        u1'     = coeLine r (Name i) a u1 -- Maybe coe?
+    in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
+  VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
