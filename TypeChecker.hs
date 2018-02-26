@@ -312,15 +312,15 @@ checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make 
 --  g : b -> a
 --  s : forall (y : b), f (g y) = y
 --  t : forall (x : a), g (f x) = x
-mkIso :: Val -> Val
-mkIso vb = eval rho $
-  Sigma $ Lam "a" U $
-  Sigma $ Lam "f" (Pi (Lam "_" a b)) $
-  Sigma $ Lam "g" (Pi (Lam "_" b a)) $
-  Sigma $ Lam "s" (Pi (Lam "y" b $ PathP (PLam (N "_") b) (App f (App g y)) y)) $
-    Pi (Lam "x" a $ PathP (PLam (N "_") a) (App g (App f x)) x)
-  where [a,b,f,g,x,y] = map Var ["a","b","f","g","x","y"]
-        rho = upd ("b",vb) emptyEnv
+-- mkIso :: Val -> Val
+-- mkIso vb = eval rho $
+--   Sigma $ Lam "a" U $
+--   Sigma $ Lam "f" (Pi (Lam "_" a b)) $
+--   Sigma $ Lam "g" (Pi (Lam "_" b a)) $
+--   Sigma $ Lam "s" (Pi (Lam "y" b $ PathP (PLam (N "_") b) (App f (App g y)) y)) $
+--     Pi (Lam "x" a $ PathP (PLam (N "_") a) (App g (App f x)) x)
+--   where [a,b,f,g,x,y] = map Var ["a","b","f","g","x","y"]
+--         rho = upd ("b",vb) emptyEnv
 
 -- An equivalence for a type a is a triple (t,f,p) where
 -- t : U
@@ -341,8 +341,8 @@ mkEquiv va = eval rho $
 checkEquiv :: Val -> Ter -> Typing ()
 checkEquiv va equiv = check (mkEquiv va) equiv
 
-checkIso :: Val -> Ter -> Typing ()
-checkIso vb iso = check (mkIso vb) iso
+-- checkIso :: Val -> Ter -> Typing ()
+-- checkIso vb iso = check (mkIso vb) iso
 
 checkBranch :: (Label,Env) -> Val -> Branch -> Val -> Val -> Typing ()
 checkBranch (OLabel _ tele,nu) f (OBranch c ns e) _ _ = do

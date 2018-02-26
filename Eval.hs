@@ -336,18 +336,22 @@ app u v = case (u,v) of
   (Ter Split{} _,_) -- | isNeutral v
                     -> VSplit u v
   (VCoe r s (VPLam i (VPi a b)) u0, v) ->
-    let j = fresh (u,v)
-        (aij,bij) = (a,b) `swap` (i,j)
-        w = coe j s (Name i) aij v
-        w0 = coe j s r aij v
-    in coe j r s (app bij w) (app u0 w0)
+    let w = coe i s (Name i) a v
+        w0 = coe i s r a v
+    in coe i r s (app b w) (app u0 w0)
+    -- Paranoid version:
+    -- let j = fresh (u,v)
+    --     (aij,bij) = (a,b) `swap` (i,j)
+    --     w = coe j s (Name i) aij v
+    --     w0 = coe j s r aij v
+    -- in coe j r s (app bij w) (app u0 w0)
   (VHCom r s (VPi a b) (Sys us) u0, v) -> 
     let i = fresh (u,v)
     in hcom i r s
             (app b v)
             (Sys (Map.mapWithKey (\al ual -> app (ual @@ i) (v `subst` toSubst al)) us))
             (app u0 v)
-  (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
+  (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv" -- TODO: rewrite it instead of implementing
 --  _ | isNeutral u       -> VApp u v
   _                     -> VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
 
@@ -392,9 +396,7 @@ inferType v = case v of
   _ -> error $ "inferType: not neutral " ++ show v
 
 (@@) :: ToII a => Val -> a -> Val
-(VPLam i u) @@ phi         = case toII phi of
-  Dir d -> subst u (i,Dir d)
-  x -> subst u (i,x)
+(VPLam i u) @@ phi         = u `subst` (i,toII phi)
 v@(Ter Hole{} _) @@ phi    = VAppII v (toII phi)
 v @@ phi -- | isNeutral v
          = case (inferType v,toII phi) of
@@ -418,7 +420,7 @@ comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
   where i = fresh (r,s,a,Sys us,u0)
 
 -- TODO: Double check!
--- i is the dimension that a and  us depends on
+-- i is the dimension that a and us depends on
 com :: Name -> II -> II -> Val -> System Val -> Val -> Val
 com _ _ s _ (Triv u) _  = u @@ s
 com i r s a (Sys us) u0 =
@@ -450,7 +452,7 @@ hcom i r s a (Sys us) u0   = case a of
         (u1,u2) = (fstVal u0,sndVal u0)
         u1fill = hcom i r (Name j) a us1 u1
         u1hcom = hcom i r s a us1 u1
-    in VPair u1hcom (com i r s (app b u1fill `swap` (i,j)) us2 u2)
+    in VPair u1hcom (com i r s (app b (u1fill `swap` (i,j))) us2 u2) -- TODO: test the swap
   -- VU -> error "hcom U"
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
@@ -585,11 +587,14 @@ coe :: Name -> II -> II -> Val -> Val -> Val
 coe i r s a u | r == s = u
 coe i r s a u = case a of
   VPathP a v0 v1 ->
-    let j = fresh (Name i,r,s,a,u)
+    let j = fresh (Name i,r,s,a,(v0,v1),u)
     in VPLam j $ com i r s (a @@ j) (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
   VSigma a b -> 
     let (u1,u2) = (fstVal u, sndVal u)
-        u1'     = coeLine r (Name i) a u1 -- Maybe coe with a fresh j?
+        u1'     = coe i r (Name i) a u1
+        -- Paranoid version:
+        -- j = fresh (Name i,r,s,a,u)
+        -- u1' = coe j r (Name i) (a `swap` (i,j)) u1
     in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
   VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
