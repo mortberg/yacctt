@@ -201,6 +201,10 @@ equiv (A B : U) : U = (f : A -> B) * isEquiv A B f
 ua (A B : U) (e : equiv A B) : Path U A B =
   <i> V i A B e
 
+uabeta (A B : U) (e : equiv A B) (a : A) :
+  Path B (coe 0->1 (ua A B e) a) (e.1 a) =
+  <i> coe i->1 (<_> B) (e.1 a)
+
 -- propIsEquiv without connections
 propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
   \(u0 u1 : isEquiv A B f) ->

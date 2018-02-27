@@ -610,6 +610,7 @@ coe i r s a u = case a of
     in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
   VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
+  VV j a b e -> vcoe i j r s a b e u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
     | otherwise -> error "coe sum"
@@ -620,6 +621,15 @@ coe i r s a u = case a of
   _ -> -- error "missing case in coe" --
        VCoe r s (VPLam i a) u
 
+-- TODO: What to do if second argument is not a name? Maybe the
+-- constructor should only take a name to ensure the invariant?
+vcoe :: Name -> II -> II -> II -> Val -> Val -> Val -> Val -> Val
+vcoe i (Name j) r s a b e u
+  | i == j = case r of
+      Dir Zero -> vin s u (coe i 0 s b (app (equivFun (e `subst` (i,0))) u))
+      Dir One -> undefined
+      Name y -> undefined
+  | otherwise = undefined -- vin j (coe i r s a u) (com i r s ...)
 
 -- Transport and forward
 
@@ -643,10 +653,10 @@ coe i r s a u = case a of
 --     in VPair (trans i a phi u1) (trans i (app f u1f) phi u2)
 --   VPi{} -> VTrans (VPLam i a) phi u
 --   VU -> u
---   -- VGlue b equivs -> -- | not (eps `notMember` (equivs `face` (i~>0)) && isNeutral u) ->
---   --   transGlue i b equivs phi u
---   -- VHCompU b es -> -- | not (eps `notMember` (es `face` (i~>0)) && isNeutral u) ->
---   --   transHCompU i b es phi u
+--   VGlue b equivs -> -- | not (eps `notMember` (equivs `face` (i~>0)) && isNeutral u) ->
+--     transGlue i b equivs phi u
+--   VHCompU b es -> -- | not (eps `notMember` (es `face` (i~>0)) && isNeutral u) ->
+--     transHCompU i b es phi u
 --   Ter (Sum _ n nass) env
 --     | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
 --     | otherwise -> case u of
