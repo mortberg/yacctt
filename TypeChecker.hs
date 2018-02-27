@@ -351,6 +351,21 @@ checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make 
 -- f : A -> B
 -- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
 -- with isContr C = (s : C) * ((z : C) -> Path C z s)
+-- mkEquiv :: Val -> Val -> Val
+-- mkEquiv va vb = eval rho $
+--   Sigma $ Lam "f" (Pi (Lam "_" a b)) $
+--   Pi (Lam "x" b iscontrfib)
+--   where [a,b,f,x,y,s,z] = map Var ["a","b","f","x","y","s","z"]
+--         rho = upd ("a",va) (upd ("b",vb) emptyEnv)
+--         fib = Sigma $ Lam "y" a (PathP (PLam (N "_") b) (App f y) x)
+--         iscontrfib = Sigma $ Lam "s" fib $
+--                      Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) z s
+
+
+-- Part 3 style equiv between A and B:
+-- f : A -> B
+-- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
+-- with isContr C = C * ((c c' : C) -> Path C c c')
 mkEquiv :: Val -> Val -> Val
 mkEquiv va vb = eval rho $
   Sigma $ Lam "f" (Pi (Lam "_" a b)) $
@@ -358,8 +373,8 @@ mkEquiv va vb = eval rho $
   where [a,b,f,x,y,s,z] = map Var ["a","b","f","x","y","s","z"]
         rho = upd ("a",va) (upd ("b",vb) emptyEnv)
         fib = Sigma $ Lam "y" a (PathP (PLam (N "_") b) (App f y) x)
-        iscontrfib = Sigma $ Lam "s" fib $
-                     Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) z s
+        iscontrfib = Sigma $ Lam "_" fib $
+                     Pi $ Lam "s" fib $ Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) s z
 
 checkEquiv :: Val -> Val -> Ter -> Typing ()
 checkEquiv va vb equiv = check (mkEquiv va vb) equiv

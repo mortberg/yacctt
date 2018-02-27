@@ -785,6 +785,13 @@ pcon c a us phi     = VPCon c a us phi
 -- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
 -- with isContr C = (s : C) * ((z : C) -> Path C z s)
 
+
+-- We are currently using:
+-- Part 3 style equiv between A and B:
+-- f : A -> B
+-- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
+-- with isContr C = C * ((c c' : C) -> Path C c c')
+
 equivFun :: Val -> Val
 equivFun = fstVal
 

@@ -159,10 +159,19 @@ propPi (A : U) (B : A -> U) (h : (x : A) -> prop (B x))
        (f0 f1 : (x : A) -> B x) : Path ((x : A) -> B x) f0 f1
   = <i> \ (x:A) -> (h x (f0 x) (f1 x)) @ i
 
-isContr (A : U) : U = (x : A) * ((y : A) -> Path A y x)
+isContr (A : U) : U = (_ : A) * ((x y : A) -> Path A x y)
 
-isContrProp (A : U) (h : isContr A) : prop A =
-  \(a b : A) -> <i> hcom 1->0 A [ (i = 0) -> h.2 a, (i = 1) -> h.2 b ] h.1
+fiber (A B : U) (f : A -> B) (b : B) : U =
+  (a : A) * Path B (f a) b
+
+isEquiv (A B : U) (f : A -> B) : U = (b : B) -> isContr (fiber A B f b)
+
+equiv (A B : U) : U = (f : A -> B) * isEquiv A B f
+
+-- isContr (A : U) : U = (x : A) * ((y : A) -> Path A y x)
+
+isContrProp (A : U) (h : isContr A) : prop A = h.2
+--  \(a b : A) -> <i> hcom 1->0 A [ (i = 0) -> h.2 a, (i = 1) -> h.2 b ] h.1
 
 -- See below for a proof without connections
 -- propIsContrConn (A : U) (z0 z1 : isContr A) : Path (isContr A) z0 z1 =
@@ -181,15 +190,21 @@ isContrProp (A : U) (h : isContr A) : prop A =
 --   lem1 (x : A) : PathP (<i> Path A a0 (p1 x @ i)) (p0 a1) (p0 x) =
 --     <i j> p0 (p1 x @ i) @ j
 
+
+-- lemProp (A : U) (h : A -> prop A) : prop A =
+
+-- propSig (A : U) (B : A -> U) (pA : prop A)
+--         (pB : (x : A) -> prop (B x)) (t u : (x:A) * B x) :
+
 propIsContr (A : U) : prop (isContr A) = lemProp (isContr A) rem
   where
-  rem (t : isContr A) : prop (isContr A) = propSig A T pA pB
-    where
-    T (x : A) : U = (y : A) -> Path A y x
-    pA (x y : A) : Path A x y =
-      <i> hcom 1->0 A [(i=0) -> <_> x, (i=1) -> t.2 y] (t.2 x @ i)
-    pB (x : A) : prop (T x) =
-      propPi A (\(y : A) -> Path A y x) (\(y : A) -> propSet A pA y x)
+  rem (t : isContr A) : prop (isContr A) = undefined -- propSig A T pA pB
+    -- where
+    -- T (x : A) : U = (y : A) -> Path A y x
+    -- pA (x y : A) : Path A x y =
+    --   <i> hcom 1->0 A [(i=0) -> <_> x, (i=1) -> t.2 y] (t.2 x @ i)
+    -- pB (x : A) : prop (T x) =
+    --   propPi A (\(y : A) -> Path A y x) (\(y : A) -> propSet A pA y x)
 
 fiber (A B : U) (f : A -> B) (b : B) : U =
   (a : A) * Path B (f a) b
@@ -204,6 +219,9 @@ ua (A B : U) (e : equiv A B) : Path U A B =
 uabeta (A B : U) (e : equiv A B) (a : A) :
   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
   <i> coe i->1 (<_> B) (e.1 a)
+
+uafoo (A B : U) (e : equiv A B) (b : B) : A =
+  coe 1->0 (ua A B e) b
 
 -- propIsEquiv without connections
 propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
