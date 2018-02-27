@@ -204,6 +204,15 @@ check a t = case (a,t) of
     unless (conv ns a0 u0 && conv ns a1 u1) $
       throwError $ "path endpoints don't match for " ++ show e ++ ", got " ++
                    show (u0,u1) ++ ", but expected " ++ show (a0,a1)
+  (VU,V r a b e) -> do
+    checkII r
+    check VU b
+    local (substEnv (eqn (r,0))) $ do
+      check VU a
+      va <- evalTyping a
+      vb <- evalTyping b
+      checkEquiv va vb e    
+  (VV r a b e,Vin s m n) -> undefined
   -- (VU,Glue a ts) -> do
   --   check VU a
   --   rho <- asks env
@@ -258,12 +267,12 @@ checkCompSystem vus = do
   unless (isCompSystem ns vus)
     (throwError $ "Incompatible system " ++ show vus)
 
--- Check the values at corresponding faces with a function, assumes
--- systems have the same faces
-checkSystemsWith :: (Show a, Show b) => System a -> System b -> (Eqn -> a -> b -> Typing c) -> Typing ()
-checkSystemsWith (Sys us) (Sys vs) f = sequence_ $ Map.elems $ Map.intersectionWithKey f us vs
-checkSystemsWith (Triv u) (Triv v) f = f (eqn (0,0)) u v >> return () -- TODO: Does it make sense to use the trivial equation here?
-checkSystemsWith x y  _= throwError $ "checkSystemsWith: cannot compare " ++ show x ++ " and " ++ show y
+-- -- Check the values at corresponding faces with a function, assumes
+-- -- systems have the same faces
+-- checkSystemsWith :: (Show a, Show b) => System a -> System b -> (Eqn -> a -> b -> Typing c) -> Typing ()
+-- checkSystemsWith (Sys us) (Sys vs) f = sequence_ $ Map.elems $ Map.intersectionWithKey f us vs
+-- checkSystemsWith (Triv u) (Triv v) f = f (eqn (0,0)) u v >> return () -- TODO: Does it make sense to use the trivial equation here?
+-- checkSystemsWith x y  _= throwError $ "checkSystemsWith: cannot compare " ++ show x ++ " and " ++ show y
 
 -- Check the faces of a system
 checkSystemWith :: System a -> (Eqn -> a -> Typing b) -> Typing ()
@@ -327,19 +336,33 @@ checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make 
 -- f : t -> a
 -- p : (x : a) -> isContr ((y:t) * Id a x (f y))
 -- with isContr c = (z : c) * ((z' : C) -> Id c z z')
-mkEquiv :: Val -> Val
-mkEquiv va = eval rho $
-  Sigma $ Lam "t" U $
-  Sigma $ Lam "f" (Pi (Lam "_" t a)) $
-  Pi (Lam "x" a $ iscontrfib)
-  where [a,b,f,x,y,s,t,z] = map Var ["a","b","f","x","y","s","t","z"]
-        rho = upd ("a",va) emptyEnv
-        fib = Sigma $ Lam "y" t (PathP (PLam (N "_") a) x (App f y))
-        iscontrfib = Sigma $ Lam "s" fib $
-                     Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) s z
+-- mkEquiv :: Val -> Val
+-- mkEquiv va = eval rho $
+--   Sigma $ Lam "t" U $
+--   Sigma $ Lam "f" (Pi (Lam "_" t a)) $
+--   Pi (Lam "x" a $ iscontrfib)
+--   where [a,b,f,x,y,s,t,z] = map Var ["a","b","f","x","y","s","t","z"]
+--         rho = upd ("a",va) emptyEnv
+--         fib = Sigma $ Lam "y" t (PathP (PLam (N "_") a) x (App f y))
+--         iscontrfib = Sigma $ Lam "s" fib $
+--                      Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) s z
 
-checkEquiv :: Val -> Ter -> Typing ()
-checkEquiv va equiv = check (mkEquiv va) equiv
+-- RedPRL style equiv between A and B:
+-- f : A -> B
+-- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
+-- with isContr C = (s : C) * ((z : C) -> Path C z s)
+mkEquiv :: Val -> Val -> Val
+mkEquiv va vb = eval rho $
+  Sigma $ Lam "f" (Pi (Lam "_" a b)) $
+  Pi (Lam "x" b iscontrfib)
+  where [a,b,f,x,y,s,z] = map Var ["a","b","f","x","y","s","z"]
+        rho = upd ("a",va) (upd ("b",vb) emptyEnv)
+        fib = Sigma $ Lam "y" a (PathP (PLam (N "_") b) (App f y) x)
+        iscontrfib = Sigma $ Lam "s" fib $
+                     Pi $ Lam "z" fib $ PathP (PLam (N "_") fib) z s
+
+checkEquiv :: Val -> Val -> Ter -> Typing ()
+checkEquiv va vb equiv = check (mkEquiv va vb) equiv
 
 -- checkIso :: Val -> Ter -> Typing ()
 -- checkIso vb iso = check (mkIso vb) iso
@@ -455,6 +478,13 @@ infer e = case e of
   Where t d -> do
     checkDecls d
     local (addDecls d) $ infer t
+  Vproj r o b e -> do
+    -- How do we get a? Maybe it's better to package a into e like in cubicaltt?
+    let a = undefined
+    check VU (V r a b e)
+    v <- evalTyping (V r a b e)
+    check v o
+    evalTyping b
   -- UnGlueElem e a ts -> do
   --   check VU (Glue a ts)
   --   vgl <- evalTyping (Glue a ts)
