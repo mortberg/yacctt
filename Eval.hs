@@ -77,9 +77,9 @@ instance Nominal Val where
     VLam _ u v        -> occurs x (u,v)
     VAppII u phi      -> occurs x (u,phi)
     VSplit u v        -> occurs x (u,v)
-    VV r a b e        -> occurs x (r,a,b,e)
-    VVin r m n        -> occurs x (r,m,n)
-    VVproj r o a b e  -> occurs x (r,o,a,b,e)
+    VV i a b e        -> x == i || occurs x (a,b,e)
+    VVin i m n        -> x == i || occurs x (m,n)
+    VVproj i o a b e  -> x == i || occurs x (o,a,b,e)
     -- VGlue a ts              -> occurs x (a,ts)
     -- VGlueElem a ts          -> occurs x (a,ts)
     -- VUnGlueElem a b ts      -> occurs x (a,b,ts)
@@ -109,9 +109,12 @@ instance Nominal Val where
     VApp u v                       -> app (subst u (i,r)) (subst v (i,r))
     VLam x t u                     -> VLam x (subst t (i,r)) (subst u (i,r))
     VSplit u v                     -> app (subst u (i,r)) (subst v (i,r))
-    VV s a b e                     -> vtype (subst s (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
-    VVin s m n                     -> vin (subst s (i,r)) (subst m (i,r)) (subst n (i,r))
-    VVproj s o a b e               -> vproj (subst s (i,r)) (subst o (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
+    VV j a b e                     ->
+      vtype (subst (Name j) (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
+    VVin j m n                     ->
+      vin (subst (Name j) (i,r)) (subst m (i,r)) (subst n (i,r))
+    VVproj j o a b e               ->
+      vproj (subst (Name j) (i,r)) (subst o (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -142,9 +145,9 @@ instance Nominal Val where
          VApp u v          -> VApp (sw u) (sw v)
          VLam x u v        -> VLam x (sw u) (sw v)
          VSplit u v        -> VSplit (sw u) (sw v)
-         VV r a b e        -> VV (sw r) (sw a) (sw b) (sw e)
-         VVin r m n        -> VVin (sw r) (sw m) (sw n)
-         VVproj r o a b e  -> VVproj (sw r) (sw o) (sw a) (sw b) (sw e)
+         VV i a b e        -> VV (swapName i ij) (sw a) (sw b) (sw e)
+         VVin i m n        -> VVin (swapName i ij) (sw m) (sw n)
+         VVproj i o a b e  -> VVproj (swapName i ij) (sw o) (sw a) (sw b) (sw e)
          -- VGlue a ts              -> VGlue (sw a) (sw ts)
          -- VGlueElem a ts          -> VGlueElem (sw a) (sw ts)
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
@@ -610,7 +613,7 @@ coe i r s a u = case a of
     in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
   VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
-  VV j a b e -> vcoe i j r s a b e u
+  VV j a b e -> vvcoe i j r s a b e u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
     | otherwise -> error "coe sum"
@@ -621,22 +624,46 @@ coe i r s a u = case a of
   _ -> -- error "missing case in coe" --
        VCoe r s (VPLam i a) u
 
--- TODO: What to do if second argument is not a name? Maybe the
--- constructor should only take a name to ensure the invariant?
 -- In Part 3: i corresponds to y, and, j to x
-vcoe :: Name -> II -> II -> II -> Val -> Val -> Val -> Val -> Val
-vcoe i (Name j) r s a b e u
-  | i == j = case r of
-      Dir Zero -> vin s u (coe i 0 s b (app (equivFun (e `subst` (i,0))) u))
-      Dir One -> undefined
-      Name y -> undefined
-  | otherwise =
-    let sys = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
-                       ,(j~>1,coe i r (Name i) b u)]
-        (ar,br,er) = (a,b,e) `subst` (i,r)
-    in vin (Name j)
-           (coe i r s a u)
-           (com i r s b sys (vproj (Name j) u ar br er))
+vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Val
+vvcoe i j r s a b e u | i /= j =
+  let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
+                      ,(j~>1,coe i r (Name i) b u)]
+      (ar,br,er) = (a,b,e) `subst` (i,r)
+  in vin (Name j)
+         (coe i r s a u)
+         (com i r s b tvec (vproj (Name j) u ar br er))
+vvcoe j _ (Dir Zero) s a b e u =
+  vin s u (coe j 0 s b (app (equivFun e `subst` (j,0)) u))
+vvcoe j _ (Dir One) s a b e u =
+  let otm = fstVal (app (equivContr e `subst` (j,s)) (coe j 1 s b u))
+      psys = mkSystem [(s~>0,sndVal otm)
+                      ,(s~>1,VPLam (N "_") (coe j 1 s b u))]
+      ptm = hcomLine 1 0 (b `subst` (j,s)) psys (coe j 1 s b u)
+  in vin s (fstVal otm) ptm
+vvcoe j _ (Name i) s a b e u =
+  let k:l:_ = freshs (Name j,Name i,s,(a,b,e),u)
+      (ak,bk,ek) = (a,b,e) `swap` (j,k)
+      otm eps = vproj (Name k) (coe j eps (Name k) (vtype (Name j) a b e) u) ak bk ek
+      (ai,bi,ei) = (a,b,e) `subst` (j,Name i)
+      psys = mkSystem [(i~>0,otm 0 `swap` (k,j))
+                      ,(i~>1,otm 1 `swap` (k,j))] -- TODO: remove the swaps?
+      ptm = com j (Name i) (Name j) b psys (vproj (Name i) u ai bi ei)
+      p0 = ptm `subst` (j,0)
+      (a0,b0,e0) = (a,b,e) `subst` (j,0)
+      uvec eps t = mkSystem [(l~>0,app (equivFun e0) (coe i eps (Name i) a0 t))
+                            ,(l~>1,p0)]
+      qtm eps t = VPair (coe i eps (Name i) a0 t)
+                        (VPLam l (com i eps (Name i) b0 (uvec eps t) (p0 `subst` (i,eps))))
+      rtm = app (app (sndVal (app (equivContr e0) p0)) (qtm 0 (u `subst` (i,0))))
+                (qtm 1 (coe j 1 0 (vtype (Name j) a b e) u `subst` (i,1))) @@ i
+      (as,bs,es) = (a,b,e) `subst` (j,s)
+      tvec = mkSystem [(i~>0,otm 0 `subst` (k,s))
+                      ,(i~>1,otm 1 `subst` (k,s))
+                      ,(i~>s,vproj s u as bs es)
+                      ,(s~>0,sndVal rtm)]
+  in vin s (fstVal rtm) (hcom l 1 0 (b `subst` (j,s)) tvec (ptm `subst` (j,s)))
+        
 
 -- Transport and forward
 
@@ -767,20 +794,21 @@ equivContr = sndVal
 vtype :: II -> Val -> Val -> Val -> Val
 vtype (Dir Zero) a _ _ = a
 vtype (Dir One) _ b _ = b
-vtype r a b e = VV r a b e
+vtype (Name i) a b e = VV i a b e
 
 vin :: II -> Val -> Val -> Val
 vin (Dir Zero) m _ = m
 vin (Dir One) _ n = n
 -- vin r m (VVproj s o _ _) | r == s = o -- TODO?
-vin r m n = VVin r m n
+vin (Name i) m n = VVin i m n
 
 vproj :: II -> Val -> Val -> Val -> Val -> Val
 vproj (Dir Zero) o _ _ e = app (equivFun e) o -- TODO: rewrite equivFun
 vproj (Dir One) o _ _ _ = o
-vproj x (VVin r m n) _ _ _ | r == x = n
-                           | otherwise = error "vproj"
-vproj r o a b e = VVproj r o a b e
+vproj (Name i) (VVin j m n) _ _ _
+  | i == j = n
+  | otherwise = error "vproj"
+vproj (Name i) o a b e = VVproj i o a b e
 
 
 -------------------------------------------------------------------------------
@@ -1024,9 +1052,9 @@ instance Convertible Val where
         -- conv ns (a,invSystem phi One,u) (a',invSystem phi' One,u')
         -- conv ns (a,phi,u) (a',phi',u')
       (VHCom r s a us u0,VHCom r' s' a' us' u0')      -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
-      (VV r a b e,VV r' a' b' e')                     -> conv ns (r,a,b,e) (r',a',b',e')
+      (VV i a b e,VV i' a' b' e')                     -> i == i' && conv ns (a,b,e) (a',b',e')
       (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
-      (VVproj r o _ _ _,VVproj r' o' _ _ _)           -> conv ns (r,o) (r',o')
+      (VVproj i o _ _ _,VVproj i' o' _ _ _)           -> i == i' && conv ns o o'
       -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
@@ -1100,9 +1128,9 @@ instance Normal Val where
     VPLam i u              -> VPLam i (normal ns u)
     VCoe r s a u           -> VCoe (normal ns r) (normal ns s) (normal ns a) (normal ns u)
     VHCom r s u vs v       -> VHCom (normal ns r) (normal ns s) (normal ns u) (normal ns vs) (normal ns v)
-    VV r a b e             -> VV (normal ns r) (normal ns a) (normal ns b) (normal ns e)
-    VVin r m n             -> VVin (normal ns r) (normal ns m) (normal ns n)
-    VVproj r o a b e       -> VVproj (normal ns r) (normal ns o) (normal ns a) (normal ns b) (normal ns e)
+    VV i a b e             -> VV i (normal ns a) (normal ns b) (normal ns e)
+    VVin i m n             -> VVin i (normal ns m) (normal ns n)
+    VVproj i o a b e       -> VVproj i (normal ns o) (normal ns a) (normal ns b) (normal ns e)
     -- VGlue u equivs      -> VGlue (normal ns u) (normal ns equivs)
     -- VGlueElem u us      -> VGlueElem (normal ns u) (normal ns us)
     -- VUnGlueElem v u us  -> VUnGlueElem (normal ns v) (normal ns u) (normal ns us)

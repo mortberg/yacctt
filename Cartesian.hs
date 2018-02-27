@@ -105,8 +105,8 @@ allCompatible :: [Eqn] -> [(Eqn,Eqn)]
 allCompatible []     = []
 allCompatible (f:fs) = map (f,) (filter (compatible f) fs) ++ allCompatible fs
 
-(~>) :: Name -> II -> Eqn
-i ~> d = eqn (Name i,d)
+(~>) :: ToII a => a -> II -> Eqn
+i ~> d = eqn (toII i,d)
 
 -- | Nominal
 

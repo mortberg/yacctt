@@ -168,9 +168,9 @@ data Val = VU
          | VCoe II II Val Val
 
            -- V-types values
-         | VV II Val Val Val -- V r A B E    (where E : A ~= B)
-         | VVin II Val Val -- Vin r M N      (where M : A and N : B)
-         | VVproj II Val Val Val Val -- Vproj r O A B E    (where O : V r A B E)
+         | VV Name Val Val Val -- V i A B E    (where E : A ~= B)
+         | VVin Name Val Val -- Vin i M N      (where M : A and N : B)
+         | VVproj Name Val Val Val Val -- Vproj i O A B E    (where O : V i A B E)
 
            -- Glue values
          -- | VGlue Val (System Val)
@@ -448,9 +448,9 @@ showVal v = case v of
   VSnd u                 -> showVal1 u <> text ".2"
   VPathP v0 v1 v2        -> text "PathP" <+> showVals [v0,v1,v2]
   VAppII v phi           -> showVal v <+> char '@' <+> showII phi
-  VV r a b e             -> text "V" <+> showII r <+> showVal1 a <+> showVal1 b <+> showVal1 e
-  VVin r m n             -> text "Vin" <+> showII r <+> showVal1 m <+> showVal1 n
-  VVproj r o a b e       -> text "Vproj" <+> showII r <+> showVal1 o <+> showVal1 a <+> showVal1 b <+> showVal1 e  
+  VV i a b e             -> text "V" <+> text (show i) <+> showVal1 a <+> showVal1 b <+> showVal1 e
+  VVin i m n             -> text "Vin" <+> text (show i) <+> showVal1 m <+> showVal1 n
+  VVproj i o a b e       -> text "Vproj" <+> text (show i) <+> showVal1 o <+> showVal1 a <+> showVal1 b <+> showVal1 e  
   -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
   -- VGlueElem a ts      -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
