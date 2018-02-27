@@ -623,13 +623,20 @@ coe i r s a u = case a of
 
 -- TODO: What to do if second argument is not a name? Maybe the
 -- constructor should only take a name to ensure the invariant?
+-- In Part 3: i corresponds to y, and, j to x
 vcoe :: Name -> II -> II -> II -> Val -> Val -> Val -> Val -> Val
 vcoe i (Name j) r s a b e u
   | i == j = case r of
       Dir Zero -> vin s u (coe i 0 s b (app (equivFun (e `subst` (i,0))) u))
       Dir One -> undefined
       Name y -> undefined
-  | otherwise = undefined -- vin j (coe i r s a u) (com i r s ...)
+  | otherwise =
+    let sys = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
+                       ,(j~>1,coe i r (Name i) b u)]
+        (ar,br,er) = (a,b,e) `subst` (i,r)
+    in vin (Name j)
+           (coe i r s a u)
+           (com i r s b sys (vproj (Name j) u ar br er))
 
 -- Transport and forward
 
