@@ -58,25 +58,28 @@ instance Nominal Env where
 
 instance Nominal Val where
   occurs x v = case v of
-    VU                      -> False
-    Ter _ e                 -> occurs x e
-    VPi u v                 -> occurs x (u,v)
-    VPathP a v0 v1          -> occurs x [a,v0,v1]
-    VPLam i v               -> if x == i then False else occurs x v
-    VSigma u v              -> occurs x (u,v)
-    VPair u v               -> occurs x (u,v)
-    VFst u                  -> occurs x u
-    VSnd u                  -> occurs x u
-    VCon _ vs               -> occurs x vs
-    VPCon _ a vs phis       -> occurs x (a,vs,phis)
-    VHCom r s a ts u        -> occurs x (r,s,a,u,ts)
-    VCoe r s a u            -> occurs x (r,s,a,u)
-    VVar _ v                -> occurs x v
-    VOpaque _ v             -> occurs x v
-    VApp u v                -> occurs x (u,v)
-    VLam _ u v              -> occurs x (u,v)
-    VAppII u phi            -> occurs x (u,phi)
-    VSplit u v              -> occurs x (u,v)
+    VU                -> False
+    Ter _ e           -> occurs x e
+    VPi u v           -> occurs x (u,v)
+    VPathP a v0 v1    -> occurs x [a,v0,v1]
+    VPLam i v         -> if x == i then False else occurs x v
+    VSigma u v        -> occurs x (u,v)
+    VPair u v         -> occurs x (u,v)
+    VFst u            -> occurs x u
+    VSnd u            -> occurs x u
+    VCon _ vs         -> occurs x vs
+    VPCon _ a vs phis -> occurs x (a,vs,phis)
+    VHCom r s a ts u  -> occurs x (r,s,a,u,ts)
+    VCoe r s a u      -> occurs x (r,s,a,u)
+    VVar _ v          -> occurs x v
+    VOpaque _ v       -> occurs x v
+    VApp u v          -> occurs x (u,v)
+    VLam _ u v        -> occurs x (u,v)
+    VAppII u phi      -> occurs x (u,phi)
+    VSplit u v        -> occurs x (u,v)
+    VV r a b e        -> occurs x (r,a,b,e)
+    VVin r m n        -> occurs x (r,m,n)
+    VVproj r o b e    -> occurs x (r,o,b,e)
     -- VGlue a ts              -> occurs x (a,ts)
     -- VGlueElem a ts          -> occurs x (a,ts)
     -- VUnGlueElem a b ts      -> occurs x (a,b,ts)
@@ -84,28 +87,31 @@ instance Nominal Val where
     -- VUnGlueElemU a b es     -> occurs x (a,b,es)
 
   subst u (i,r) = case u of
-         VU           -> VU
-         Ter t e      -> Ter t (subst e (i,r))
-         VPi a f      -> VPi (subst a (i,r)) (subst f (i,r))
-         VPathP a u v -> VPathP (subst a (i,r)) (subst u (i,r)) (subst v (i,r))
-         VPLam j v | j == i -> u
-                   | not (j `occurs` r) -> VPLam j (subst v (i,r))
-                   | otherwise -> VPLam k (subst (v `swap` (j,k)) (i,r))
-              where k = fresh (v,Name i,r)
-         VSigma a f              -> VSigma (subst a (i,r)) (subst f (i,r))
-         VPair u v               -> VPair (subst u (i,r)) (subst v (i,r))
-         VFst u                  -> fstVal (subst u (i,r))
-         VSnd u                  -> sndVal (subst u (i,r))
-         VCon c vs               -> VCon c (subst vs (i,r))
-         VPCon c a vs phis       -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
-         VHCom s s' a us u0 -> hcomLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
-         VCoe s s' a u      -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
-         VVar x v                -> VVar x (subst v (i,r))
-         VOpaque x v             -> VOpaque x (subst v (i,r))
-         VAppII u psi       -> subst u (i,r) @@ subst psi (i,r)
-         VApp u v                -> app (subst u (i,r)) (subst v (i,r))
-         VLam x t u              -> VLam x (subst t (i,r)) (subst u (i,r))
-         VSplit u v              -> app (subst u (i,r)) (subst v (i,r))
+    VU                             -> VU
+    Ter t e                        -> Ter t (subst e (i,r))
+    VPi a f                        -> VPi (subst a (i,r)) (subst f (i,r))
+    VPathP a u v                   -> VPathP (subst a (i,r)) (subst u (i,r)) (subst v (i,r))
+    VPLam j v | j == i             -> u
+              | not (j `occurs` r) -> VPLam j (subst v (i,r))
+              | otherwise          -> VPLam k (subst (v `swap` (j,k)) (i,r))
+         where k = fresh (v,Name i,r)
+    VSigma a f                     -> VSigma (subst a (i,r)) (subst f (i,r))
+    VPair u v                      -> VPair (subst u (i,r)) (subst v (i,r))
+    VFst u                         -> fstVal (subst u (i,r))
+    VSnd u                         -> sndVal (subst u (i,r))
+    VCon c vs                      -> VCon c (subst vs (i,r))
+    VPCon c a vs phis              -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
+    VHCom s s' a us u0             -> hcomLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
+    VCoe s s' a u                  -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
+    VVar x v                       -> VVar x (subst v (i,r))
+    VOpaque x v                    -> VOpaque x (subst v (i,r))
+    VAppII u psi                   -> subst u (i,r) @@ subst psi (i,r)
+    VApp u v                       -> app (subst u (i,r)) (subst v (i,r))
+    VLam x t u                     -> VLam x (subst t (i,r)) (subst u (i,r))
+    VSplit u v                     -> app (subst u (i,r)) (subst v (i,r))
+    VV s a b e                     -> vtype (subst s (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
+    VVin s m n                     -> vin (subst s (i,r)) (subst m (i,r)) (subst n (i,r))
+    VVproj s o b e                 -> vproj (subst s (i,r)) (subst o (i,r)) (subst b (i,r)) (subst e (i,r))
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -117,25 +123,28 @@ instance Nominal Val where
     let sw :: Nominal a => a -> a
         sw u = swap u ij
     in case u of
-         VU                      -> VU
-         Ter t e                 -> Ter t (sw e)
-         VPi a f                 -> VPi (sw a) (sw f)
-         VPathP a u v            -> VPathP (sw a) (sw u) (sw v)
-         VPLam k v               -> VPLam (swapName k ij) (sw v)
-         VSigma a f              -> VSigma (sw a) (sw f)
-         VPair u v               -> VPair (sw u) (sw v)
-         VFst u                  -> VFst (sw u)
-         VSnd u                  -> VSnd (sw u)
-         VCon c vs               -> VCon c (sw vs)
-         VPCon c a vs phis       -> VPCon c (sw a) (sw vs) (sw phis)
-         VHCom r s a us u        -> VHCom (sw r) (sw s) (sw a) (sw us) (sw u)
-         VCoe r s a u            -> VCoe (sw r) (sw s) (sw a) (sw u)
-         VVar x v                -> VVar x (sw v)
-         VOpaque x v             -> VOpaque x (sw v)
-         VAppII u psi            -> VAppII (sw u) (sw psi)
-         VApp u v                -> VApp (sw u) (sw v)
-         VLam x u v              -> VLam x (sw u) (sw v)
-         VSplit u v              -> VSplit (sw u) (sw v)
+         VU                -> VU
+         Ter t e           -> Ter t (sw e)
+         VPi a f           -> VPi (sw a) (sw f)
+         VPathP a u v      -> VPathP (sw a) (sw u) (sw v)
+         VPLam k v         -> VPLam (swapName k ij) (sw v)
+         VSigma a f        -> VSigma (sw a) (sw f)
+         VPair u v         -> VPair (sw u) (sw v)
+         VFst u            -> VFst (sw u)
+         VSnd u            -> VSnd (sw u)
+         VCon c vs         -> VCon c (sw vs)
+         VPCon c a vs phis -> VPCon c (sw a) (sw vs) (sw phis)
+         VHCom r s a us u  -> VHCom (sw r) (sw s) (sw a) (sw us) (sw u)
+         VCoe r s a u      -> VCoe (sw r) (sw s) (sw a) (sw u)
+         VVar x v          -> VVar x (sw v)
+         VOpaque x v       -> VOpaque x (sw v)
+         VAppII u psi      -> VAppII (sw u) (sw psi)
+         VApp u v          -> VApp (sw u) (sw v)
+         VLam x u v        -> VLam x (sw u) (sw v)
+         VSplit u v        -> VSplit (sw u) (sw v)
+         VV r a b e        -> VV (sw r) (sw a) (sw b) (sw e)
+         VVin r m n        -> VVin (sw r) (sw m) (sw n)
+         VVproj r o b e    -> VV (sw r) (sw o) (sw b) (sw e)
          -- VGlue a ts              -> VGlue (sw a) (sw ts)
          -- VGlueElem a ts          -> VGlueElem (sw a) (sw ts)
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
@@ -295,6 +304,9 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Coe r s a t       -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
   -- Comp a t0 ts        ->
   --   compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
+  V r a b e -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
+  Vin r m n -> vin (evalII rho r) (eval rho m) (eval rho n)
+  Vproj r o b e -> vproj (evalII rho r) (eval rho o) (eval rho b) (eval rho e)  
   -- Glue a ts           -> glue (eval rho a) (evalSystem rho ts)
   -- GlueElem a ts       -> glueElem (eval rho a) (evalSystem rho ts)
   -- UnGlueElem v a ts   -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
@@ -391,6 +403,7 @@ inferType v = case v of
                   ++ ", got " ++ show ty
   VHCom r s a _ _ -> a
   VCoe r s a _ -> a @@ s
+  VVproj _ _ b _ -> b
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
@@ -722,6 +735,28 @@ pcon c a us phi     = VPCon c a us phi
 
 
 -------------------------------------------------------------------------------
+-- | V-types
+
+vtype :: II -> Val -> Val -> Val -> Val
+vtype (Dir Zero) a _ _ = a
+vtype (Dir One) _ b _ = b
+vtype r a b e = VV r a b e
+
+vin :: II -> Val -> Val -> Val
+vin (Dir Zero) m _ = m
+vin (Dir One) _ n = n
+-- vin r m (VVproj s o _ _) | r == s = o -- TODO?
+vin r m n = VVin r m n
+
+vproj :: II -> Val -> Val -> Val -> Val
+vproj (Dir Zero) o b e = app (equivFun e) o -- TODO: rewrite equivFun
+vproj (Dir One) o _ _ = o
+vproj x (VVin r m n) b e | r == x = n
+                         | otherwise = error "vproj"
+vproj r o b e = VVproj r o b e                          
+
+
+-------------------------------------------------------------------------------
 -- | Glue
 
 -- An equivalence for a type a is a triple (t,f,p) where
@@ -918,56 +953,59 @@ instance Convertible Val where
               | otherwise =
     let j = fresh (u,v)
     in case (u,v) of
-      (Ter (Lam x a u) e,Ter (Lam x' a' u') e') ->
+      (Ter (Lam x a u) e,Ter (Lam x' a' u') e')       ->
         let v@(VVar n _) = mkVarNice ns x (eval e a)
         in conv (n:ns) (eval (upd (x,v) e) u) (eval (upd (x',v) e') u')
-      (Ter (Lam x a u) e,u') ->
+      (Ter (Lam x a u) e,u')                          ->
         let v@(VVar n _) = mkVarNice ns x (eval e a)
         in conv (n:ns) (eval (upd (x,v) e) u) (app u' v)
-      (u',Ter (Lam x a u) e) ->
+      (u',Ter (Lam x a u) e)                          ->
         let v@(VVar n _) = mkVarNice ns x (eval e a)
         in conv (n:ns) (app u' v) (eval (upd (x,v) e) u)
       (Ter (Split _ p _ _) e,Ter (Split _ p' _ _) e') -> (p == p') && conv ns e e'
       (Ter (Sum p _ _) e,Ter (Sum p' _ _) e')         -> (p == p') && conv ns e e'
       (Ter (HSum p _ _) e,Ter (HSum p' _ _) e')       -> (p == p') && conv ns e e'
-      (Ter (Undef p _) e,Ter (Undef p' _) e') -> p == p' && conv ns e e'
-      (Ter (Hole p) e,Ter (Hole p') e') -> p == p' && conv ns e e'
-      -- (Ter Hole{} e,_) -> True
-      -- (_,Ter Hole{} e') -> True
-      (VPi u v,VPi u' v') ->
+      (Ter (Undef p _) e,Ter (Undef p' _) e')         -> p == p' && conv ns e e'
+      (Ter (Hole p) e,Ter (Hole p') e')               -> p == p' && conv ns e e'
+      -- (Ter Hole{} e,_)                             -> True
+      -- (_,Ter Hole{} e')                            -> True
+      (VPi u v,VPi u' v')                             ->
         let w@(VVar n _) = mkVarNice ns "X" u
         in conv ns u u' && conv (n:ns) (app v w) (app v' w)
-      (VSigma u v,VSigma u' v') ->
+      (VSigma u v,VSigma u' v')                       ->
         let w@(VVar n _) = mkVarNice ns "X" u
         in conv ns u u' && conv (n:ns) (app v w) (app v' w)
-      (VCon c us,VCon c' us')   -> (c == c') && conv ns us us'
-      (VPCon c v us phis,VPCon c' v' us' phis') ->
+      (VCon c us,VCon c' us')                         -> (c == c') && conv ns us us'
+      (VPCon c v us phis,VPCon c' v' us' phis')       ->
         (c == c') && conv ns (v,us,phis) (v',us',phis')
-      (VPair u v,VPair u' v')    -> conv ns u u' && conv ns v v'
-      (VPair u v,w)              -> conv ns u (fstVal w) && conv ns v (sndVal w)
-      (w,VPair u v)              -> conv ns (fstVal w) u && conv ns (sndVal w) v
-      (VFst u,VFst u')           -> conv ns u u'
-      (VSnd u,VSnd u')           -> conv ns u u'
-      (VApp u v,VApp u' v')      -> conv ns u u' && conv ns v v'
-      (VSplit u v,VSplit u' v')  -> conv ns u u' && conv ns v v'
-      (VOpaque x _, VOpaque x' _) -> x == x'
-      (VVar x _, VVar x' _)       -> x == x'
-      (VPathP a b c,VPathP a' b' c') -> conv ns a a' && conv ns b b' && conv ns c c'
-      (VPLam i a,VPLam i' a')    -> conv ns (a `swap` (i,j)) (a' `swap` (i',j))
-      (VPLam i a,p')             -> conv ns (a `swap` (i,j)) (p' @@ j)
-      (p,VPLam i' a')            -> conv ns (p @@ j) (a' `swap` (i',j))
-      (VAppII u x,VAppII u' x') -> conv ns (u,x) (u',x')
-      (VCoe r s a u,VCoe r' s' a' u') -> conv ns (r,s,a,u) (r',s',a',u')
+      (VPair u v,VPair u' v')                         -> conv ns u u' && conv ns v v'
+      (VPair u v,w)                                   -> conv ns u (fstVal w) && conv ns v (sndVal w)
+      (w,VPair u v)                                   -> conv ns (fstVal w) u && conv ns (sndVal w) v
+      (VFst u,VFst u')                                -> conv ns u u'
+      (VSnd u,VSnd u')                                -> conv ns u u'
+      (VApp u v,VApp u' v')                           -> conv ns u u' && conv ns v v'
+      (VSplit u v,VSplit u' v')                       -> conv ns u u' && conv ns v v'
+      (VOpaque x _, VOpaque x' _)                     -> x == x'
+      (VVar x _, VVar x' _)                           -> x == x'
+      (VPathP a b c,VPathP a' b' c')                  -> conv ns a a' && conv ns b b' && conv ns c c'
+      (VPLam i a,VPLam i' a')                         -> conv ns (a `swap` (i,j)) (a' `swap` (i',j))
+      (VPLam i a,p')                                  -> conv ns (a `swap` (i,j)) (p' @@ j)
+      (p,VPLam i' a')                                 -> conv ns (p @@ j) (a' `swap` (i',j))
+      (VAppII u x,VAppII u' x')                       -> conv ns (u,x) (u',x')
+      (VCoe r s a u,VCoe r' s' a' u')                 -> conv ns (r,s,a,u) (r',s',a',u')
         -- -- TODO: Maybe identify via (- = 1)?  Or change argument to a system..
         -- conv ns (a,invSystem phi One,u) (a',invSystem phi' One,u')
         -- conv ns (a,phi,u) (a',phi',u')
-      (VHCom r s a us u0,VHCom r' s' a' us' u0') -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
-      -- (VGlue v equivs,VGlue v' equivs')   -> conv ns (v,equivs) (v',equivs')
-      -- (VGlueElem u us,VGlueElem u' us')   -> conv ns (u,us) (u',us')
-      -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _) -> conv ns u u'
-      -- (VUnGlueElem u _ _,VUnGlueElem u' _ _) -> conv ns u u'
-      -- (VHCompU u es,VHCompU u' es')            -> conv ns (u,es) (u',es')
-      _                                      -> False
+      (VHCom r s a us u0,VHCom r' s' a' us' u0')      -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
+      (VV r a b e,VV r' a' b' e')                     -> conv ns (r,a,b,e) (r',a',b',e')
+      (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
+      (VVproj r o _ _,VVproj r' o' _ _)               -> conv ns (r,o) (r',o')
+      -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
+      -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
+      -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
+      -- (VUnGlueElem u _ _,VUnGlueElem u' _ _)       -> conv ns u u'
+      -- (VHCompU u es,VHCompU u' es')                -> conv ns (u,es) (u',es')
+      _                                               -> False
 
 instance Convertible Ctxt where
   conv _ _ _ = True
@@ -1020,33 +1058,36 @@ instance Normal Env where
 
 instance Normal Val where
   normal ns v = case v of
-    VU                  -> VU
-    Ter (Lam x t u) e   ->
+    VU                     -> VU
+    Ter (Lam x t u) e      ->
       let w = eval e t
           v@(VVar n _) = mkVarNice ns x w
       in VLam n (normal ns w) $ normal (n:ns) (eval (upd (x,v) e) u)
-    Ter t e             -> Ter t (normal ns e)
-    VPi u v             -> VPi (normal ns u) (normal ns v)
-    VSigma u v          -> VSigma (normal ns u) (normal ns v)
-    VPair u v           -> VPair (normal ns u) (normal ns v)
-    VCon n us           -> VCon n (normal ns us)
-    VPCon n u us phis   -> VPCon n (normal ns u) (normal ns us) phis
-    VPathP a u0 u1      -> VPathP (normal ns a) (normal ns u0) (normal ns u1)
-    VPLam i u           -> VPLam i (normal ns u)
-    VCoe r s a u        -> VCoe (normal ns r) (normal ns s) (normal ns a) (normal ns u)
-    VHCom r s u vs v    -> VHCom (normal ns r) (normal ns s) (normal ns u) (normal ns vs) (normal ns v)
+    Ter t e                -> Ter t (normal ns e)
+    VPi u v                -> VPi (normal ns u) (normal ns v)
+    VSigma u v             -> VSigma (normal ns u) (normal ns v)
+    VPair u v              -> VPair (normal ns u) (normal ns v)
+    VCon n us              -> VCon n (normal ns us)
+    VPCon n u us phis      -> VPCon n (normal ns u) (normal ns us) phis
+    VPathP a u0 u1         -> VPathP (normal ns a) (normal ns u0) (normal ns u1)
+    VPLam i u              -> VPLam i (normal ns u)
+    VCoe r s a u           -> VCoe (normal ns r) (normal ns s) (normal ns a) (normal ns u)
+    VHCom r s u vs v       -> VHCom (normal ns r) (normal ns s) (normal ns u) (normal ns vs) (normal ns v)
+    VV r a b e             -> VV (normal ns r) (normal ns a) (normal ns b) (normal ns e)
+    VVin r m n             -> VVin (normal ns r) (normal ns m) (normal ns n)
+    VVproj r o b e         -> VVproj (normal ns r) (normal ns o) (normal ns b) (normal ns e)
     -- VGlue u equivs      -> VGlue (normal ns u) (normal ns equivs)
     -- VGlueElem u us      -> VGlueElem (normal ns u) (normal ns us)
     -- VUnGlueElem v u us  -> VUnGlueElem (normal ns v) (normal ns u) (normal ns us)
     -- VUnGlueElemU e u us -> VUnGlueElemU (normal ns e) (normal ns u) (normal ns us)
     -- VHCompU a ts        -> VHCompU (normal ns a) (normal ns ts)
-    VVar x t            -> VVar x (normal ns t)
-    VFst t              -> VFst (normal ns t)
-    VSnd t              -> VSnd (normal ns t)
-    VSplit u t          -> VSplit (normal ns u) (normal ns t)
-    VApp u v            -> VApp (normal ns u) (normal ns v)
-    VAppII u phi   -> VAppII (normal ns u) (normal ns phi)
-    _                   -> v
+    VVar x t               -> VVar x (normal ns t)
+    VFst t                 -> VFst (normal ns t)
+    VSnd t                 -> VSnd (normal ns t)
+    VSplit u t             -> VSplit (normal ns u) (normal ns t)
+    VApp u v               -> VApp (normal ns u) (normal ns v)
+    VAppII u phi           -> VAppII (normal ns u) (normal ns phi)
+    _                      -> v
 
 instance Normal (Nameless a) where
   normal _ = id

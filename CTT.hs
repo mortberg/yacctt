@@ -118,6 +118,10 @@ data Ter = Pi Ter
          | HCom II II Ter (System Ter) Ter
            -- Kan composition           
          -- | Com II II Ter (System Ter) Ter
+           -- V-types
+         | V II Ter Ter Ter -- V r A B E    (where E : A ~= B)
+         | Vin II Ter Ter -- Vin r M N      (where M : A and N : B)
+         | Vproj II Ter Ter Ter -- Vproj r O B E    (where O : V r A B E)
            -- Glue
          -- | Glue Ter (System Ter)
          -- | GlueElem Ter (System Ter)
@@ -153,12 +157,7 @@ data Val = VU
            -- Path values
          | VPathP Val Val Val
          | VPLam Name Val
-
-           -- Glue values
-         -- | VGlue Val (System Val)
-         -- | VGlueElem Val (System Val)
-         -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
-
+      
            -- Composition in the universe. Should be FCom
          -- | VHCompU Val (System Val)
 
@@ -167,6 +166,16 @@ data Val = VU
 
            -- Coe
          | VCoe II II Val Val
+
+           -- V-types values
+         | VV II Val Val Val -- V r A B E    (where E : A ~= B)
+         | VVin II Val Val -- Vin r M N      (where M : A and N : B)
+         | VVproj II Val Val Val -- Vproj r O B E    (where O : V r A B E)
+
+           -- Glue values
+         -- | VGlue Val (System Val)
+         -- | VGlueElem Val (System Val)
+         -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
            -- Neutral values:
          | VVar Ident Val
@@ -195,6 +204,7 @@ isNeutral v = case v of
   VAppII{}  -> True
   -- VUnGlueElemU{} -> True
   -- VUnGlueElem{}  -> True
+  VVproj{}       -> True
   _              -> False
 
 isNeutralSystem :: System Val -> Bool
@@ -378,6 +388,9 @@ showTer v = case v of
   HCom r s a ts t  -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
   Coe r s e t0     -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
   -- Comp e t ts        -> text "comp" <+> showTers [e,t] <+> text (show ts)
+  V r a b e -> text "V" <+> showII r <+> showTer1 a <+> showTer1 b <+> showTer1 e
+  Vin r m n  -> text "Vin" <+> showII r <+> showTer1 m <+> showTer1 n
+  Vproj r o b e  -> text "Vproj" <+> showII r <+> showTer1 o <+> showTer1 b <+> showTer1 e
   -- Glue a ts          -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts      -> text "glue" <+> showTer1 a <+> text (show ts)
   -- UnGlueElem a b ts  -> text "unglue" <+> showTers [a,b] <+> text (show ts)
@@ -438,6 +451,9 @@ showVal v = case v of
   VSnd u            -> showVal1 u <> text ".2"
   VPathP v0 v1 v2   -> text "PathP" <+> showVals [v0,v1,v2]
   VAppII v phi -> showVal v <+> char '@' <+> showII phi
+  VV r a b e -> text "V" <+> showII r <+> showVal1 a <+> showVal1 b <+> showVal1 e
+  VVin r m n  -> text "Vin" <+> showII r <+> showVal1 m <+> showVal1 n
+  VVproj r o b e  -> text "Vproj" <+> showII r <+> showVal1 o <+> showVal1 b <+> showVal1 e  
   -- VGlue a ts        -> text "Glue" <+> showVal1 a <+> text (show ts)
   -- VGlueElem a ts    -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
