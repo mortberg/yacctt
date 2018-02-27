@@ -79,7 +79,7 @@ instance Nominal Val where
     VSplit u v        -> occurs x (u,v)
     VV r a b e        -> occurs x (r,a,b,e)
     VVin r m n        -> occurs x (r,m,n)
-    VVproj r o b e    -> occurs x (r,o,b,e)
+    VVproj r o a b e  -> occurs x (r,o,a,b,e)
     -- VGlue a ts              -> occurs x (a,ts)
     -- VGlueElem a ts          -> occurs x (a,ts)
     -- VUnGlueElem a b ts      -> occurs x (a,b,ts)
@@ -111,7 +111,7 @@ instance Nominal Val where
     VSplit u v                     -> app (subst u (i,r)) (subst v (i,r))
     VV s a b e                     -> vtype (subst s (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
     VVin s m n                     -> vin (subst s (i,r)) (subst m (i,r)) (subst n (i,r))
-    VVproj s o b e                 -> vproj (subst s (i,r)) (subst o (i,r)) (subst b (i,r)) (subst e (i,r))
+    VVproj s o a b e               -> vproj (subst s (i,r)) (subst o (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -144,7 +144,7 @@ instance Nominal Val where
          VSplit u v        -> VSplit (sw u) (sw v)
          VV r a b e        -> VV (sw r) (sw a) (sw b) (sw e)
          VVin r m n        -> VVin (sw r) (sw m) (sw n)
-         VVproj r o b e    -> VV (sw r) (sw o) (sw b) (sw e)
+         VVproj r o a b e  -> VVproj (sw r) (sw o) (sw a) (sw b) (sw e)
          -- VGlue a ts              -> VGlue (sw a) (sw ts)
          -- VGlueElem a ts          -> VGlueElem (sw a) (sw ts)
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
@@ -275,42 +275,41 @@ instance Nominal Ter where
 
 eval :: Env -> Ter -> Val
 eval rho@(Env (_,_,_,Nameless os)) v = case v of
-  U                   -> VU
-  App r s             -> app (eval rho r) (eval rho s)
+  U                     -> VU
+  App r s               -> app (eval rho r) (eval rho s)
   Var i
     | i `Set.member` os -> VOpaque i (lookType i rho)
-    | otherwise       -> look i rho
-  Pi t@(Lam _ a _)    -> VPi (eval rho a) (eval rho t)
-  Sigma t@(Lam _ a _) -> VSigma (eval rho a) (eval rho t)
-  Pair a b            -> VPair (eval rho a) (eval rho b)
-  Fst a               -> fstVal (eval rho a)
-  Snd a               -> sndVal (eval rho a)
-  Where t decls       -> eval (defWhere decls rho) t
-  Con name ts         -> VCon name (map (eval rho) ts)
-  PCon name a ts phis ->
+    | otherwise         -> look i rho
+  Pi t@(Lam _ a _)      -> VPi (eval rho a) (eval rho t)
+  Sigma t@(Lam _ a _)   -> VSigma (eval rho a) (eval rho t)
+  Pair a b              -> VPair (eval rho a) (eval rho b)
+  Fst a                 -> fstVal (eval rho a)
+  Snd a                 -> sndVal (eval rho a)
+  Where t decls         -> eval (defWhere decls rho) t
+  Con name ts           -> VCon name (map (eval rho) ts)
+  PCon name a ts phis   ->
     pcon name (eval rho a) (map (eval rho) ts) (map (evalII rho) phis)
-  Lam{}               -> Ter v rho
-  Split{}             -> Ter v rho
-  Sum{}               -> Ter v rho
-  HSum{}              -> Ter v rho
-  Undef{}             -> Ter v rho
-  Hole{}              -> Ter v rho
-  PathP a e0 e1       -> VPathP (eval rho a) (eval rho e0) (eval rho e1)
-  PLam i t            -> let j = fresh rho
-                         in VPLam j (eval (sub (i,Name j) rho) t)
-  AppII e phi -> eval rho e @@ evalII rho phi
-  HCom r s a us u0 ->
+  Lam{}                 -> Ter v rho
+  Split{}               -> Ter v rho
+  Sum{}                 -> Ter v rho
+  HSum{}                -> Ter v rho
+  Undef{}               -> Ter v rho
+  Hole{}                -> Ter v rho
+  PathP a e0 e1         -> VPathP (eval rho a) (eval rho e0) (eval rho e1)
+  PLam i t              -> let j = fresh rho
+                           in VPLam j (eval (sub (i,Name j) rho) t)
+  AppII e phi           -> eval rho e @@ evalII rho phi
+  HCom r s a us u0      ->
     hcomLine (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
-  Coe r s a t       -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
-  -- Comp a t0 ts        ->
-  --   compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
-  V r a b e -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
-  Vin r m n -> vin (evalII rho r) (eval rho m) (eval rho n)
-  Vproj r o b e -> vproj (evalII rho r) (eval rho o) (eval rho b) (eval rho e)  
-  -- Glue a ts           -> glue (eval rho a) (evalSystem rho ts)
-  -- GlueElem a ts       -> glueElem (eval rho a) (evalSystem rho ts)
-  -- UnGlueElem v a ts   -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
-  _                   -> error $ "Cannot evaluate " ++ show v
+  Coe r s a t           -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
+  -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
+  V r a b e             -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
+  Vin r m n             -> vin (evalII rho r) (eval rho m) (eval rho n)
+  Vproj r o a b e       -> vproj (evalII rho r) (eval rho o) (eval rho a) (eval rho b) (eval rho e)
+  -- Glue a ts          -> glue (eval rho a) (evalSystem rho ts)
+  -- GlueElem a ts      -> glueElem (eval rho a) (evalSystem rho ts)
+  -- UnGlueElem v a ts  -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
+  _                     -> error $ "Cannot evaluate " ++ show v
 
 evals :: Env -> [(Ident,Ter)] -> [(Ident,Val)]
 evals env bts = [ (b,eval env t) | (b,t) <- bts ]
@@ -357,7 +356,7 @@ app u v = case (u,v) of
     --     w = coe j s (Name i) aij v
     --     w0 = coe j s r aij v
     -- in coe j r s (app bij w) (app u0 w0)
-  (VHCom r s (VPi a b) (Sys us) u0, v) -> 
+  (VHCom r s (VPi a b) (Sys us) u0, v) ->
     let i = fresh (u,v)
     in hcom i r s
             (app b v)
@@ -403,7 +402,7 @@ inferType v = case v of
                   ++ ", got " ++ show ty
   VHCom r s a _ _ -> a
   VCoe r s a _ -> a @@ s
-  VVproj _ _ b _ -> b
+  VVproj _ _ _ b _ -> b
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
@@ -602,7 +601,7 @@ coe i r s a u = case a of
   VPathP a v0 v1 ->
     let j = fresh (Name i,r,s,a,(v0,v1),u)
     in VPLam j $ com i r s (a @@ j) (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
-  VSigma a b -> 
+  VSigma a b ->
     let (u1,u2) = (fstVal u, sndVal u)
         u1'     = coe i r (Name i) a u1
         -- Paranoid version:
@@ -737,6 +736,17 @@ pcon c a us phi     = VPCon c a us phi
 -------------------------------------------------------------------------------
 -- | V-types
 
+-- RedPRL style equiv between A and B:
+-- f : A -> B
+-- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
+-- with isContr C = (s : C) * ((z : C) -> Path C z s)
+
+equivFun :: Val -> Val
+equivFun = fstVal
+
+equivContr :: Val -> Val
+equivContr = sndVal
+
 vtype :: II -> Val -> Val -> Val -> Val
 vtype (Dir Zero) a _ _ = a
 vtype (Dir One) _ b _ = b
@@ -748,12 +758,12 @@ vin (Dir One) _ n = n
 -- vin r m (VVproj s o _ _) | r == s = o -- TODO?
 vin r m n = VVin r m n
 
-vproj :: II -> Val -> Val -> Val -> Val
-vproj (Dir Zero) o b e = app (equivFun e) o -- TODO: rewrite equivFun
-vproj (Dir One) o _ _ = o
-vproj x (VVin r m n) b e | r == x = n
-                         | otherwise = error "vproj"
-vproj r o b e = VVproj r o b e                          
+vproj :: II -> Val -> Val -> Val -> Val -> Val
+vproj (Dir Zero) o _ _ e = app (equivFun e) o -- TODO: rewrite equivFun
+vproj (Dir One) o _ _ _ = o
+vproj x (VVin r m n) _ _ _ | r == x = n
+                           | otherwise = error "vproj"
+vproj r o a b e = VVproj r o a b e
 
 
 -------------------------------------------------------------------------------
@@ -766,14 +776,14 @@ vproj r o b e = VVproj r o b e
 -- with isContr c = (z : c) * ((z' : C) -> Id c z z')
 
 -- Extraction functions for getting a, f, s and t:
-equivDom :: Val -> Val
-equivDom = fstVal
+-- equivDom :: Val -> Val
+-- equivDom = fstVal
 
-equivFun :: Val -> Val
-equivFun = fstVal . sndVal
+-- equivFun :: Val -> Val
+-- equivFun = fstVal . sndVal
 
-equivContr :: Val -> Val
-equivContr = sndVal . sndVal
+-- equivContr :: Val -> Val
+-- equivContr = sndVal . sndVal
 
 -- glue :: Val -> System Val -> Val
 -- glue b ts | eps `member` ts = equivDom (ts ! eps)
@@ -835,12 +845,12 @@ equivContr = sndVal . sndVal
 --     v1' = hComp i ai1 v1 (Map.map (\om -> (sndVal om) @@ i) fibersys'
 --                            `unionSystem` border v1 psisys)
 
-mkFiberType :: Val -> Val -> Val -> Val
-mkFiberType a x equiv = eval rho $
-  Sigma $ Lam "y" tt (PathP (PLam (N "_") ta) tx (App tf ty))
-  where [ta,tx,ty,tf,tt] = map Var ["a","x","y","f","t"]
-        rho = upds [("a",a),("x",x),("f",equivFun equiv)
-                   ,("t",equivDom equiv)] emptyEnv
+-- mkFiberType :: Val -> Val -> Val -> Val
+-- mkFiberType a x equiv = eval rho $
+--   Sigma $ Lam "y" tt (PathP (PLam (N "_") ta) tx (App tf ty))
+--   where [ta,tx,ty,tf,tt] = map Var ["a","x","y","f","t"]
+--         rho = upds [("a",a),("x",x),("f",equivFun equiv)
+--                    ,("t",equivDom equiv)] emptyEnv
 
 -- -- Assumes u' : A is a solution of us + (i0 -> u0)
 -- -- The output is an L-path in A(i1) between comp i u0 us and u'(i1)
@@ -999,7 +1009,7 @@ instance Convertible Val where
       (VHCom r s a us u0,VHCom r' s' a' us' u0')      -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
       (VV r a b e,VV r' a' b' e')                     -> conv ns (r,a,b,e) (r',a',b',e')
       (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
-      (VVproj r o _ _,VVproj r' o' _ _)               -> conv ns (r,o) (r',o')
+      (VVproj r o _ _ _,VVproj r' o' _ _ _)           -> conv ns (r,o) (r',o')
       -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
@@ -1075,7 +1085,7 @@ instance Normal Val where
     VHCom r s u vs v       -> VHCom (normal ns r) (normal ns s) (normal ns u) (normal ns vs) (normal ns v)
     VV r a b e             -> VV (normal ns r) (normal ns a) (normal ns b) (normal ns e)
     VVin r m n             -> VVin (normal ns r) (normal ns m) (normal ns n)
-    VVproj r o b e         -> VVproj (normal ns r) (normal ns o) (normal ns b) (normal ns e)
+    VVproj r o a b e       -> VVproj (normal ns r) (normal ns o) (normal ns a) (normal ns b) (normal ns e)
     -- VGlue u equivs      -> VGlue (normal ns u) (normal ns equivs)
     -- VGlueElem u us      -> VGlueElem (normal ns u) (normal ns us)
     -- VUnGlueElem v u us  -> VUnGlueElem (normal ns v) (normal ns u) (normal ns us)

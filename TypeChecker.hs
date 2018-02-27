@@ -478,9 +478,7 @@ infer e = case e of
   Where t d -> do
     checkDecls d
     local (addDecls d) $ infer t
-  Vproj r o b e -> do
-    -- How do we get a? Maybe it's better to package a into e like in cubicaltt?
-    let a = undefined
+  Vproj r o a b e -> do
     check VU (V r a b e)
     v <- evalTyping (V r a b e)
     check v o

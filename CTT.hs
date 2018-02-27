@@ -121,7 +121,7 @@ data Ter = Pi Ter
            -- V-types
          | V II Ter Ter Ter -- V r A B E    (where E : A ~= B)
          | Vin II Ter Ter -- Vin r M N      (where M : A and N : B)
-         | Vproj II Ter Ter Ter -- Vproj r O B E    (where O : V r A B E)
+         | Vproj II Ter Ter Ter Ter -- Vproj r O A B E    (where O : V r A B E)
            -- Glue
          -- | Glue Ter (System Ter)
          -- | GlueElem Ter (System Ter)
@@ -170,7 +170,7 @@ data Val = VU
            -- V-types values
          | VV II Val Val Val -- V r A B E    (where E : A ~= B)
          | VVin II Val Val -- Vin r M N      (where M : A and N : B)
-         | VVproj II Val Val Val -- Vproj r O B E    (where O : V r A B E)
+         | VVproj II Val Val Val Val -- Vproj r O A B E    (where O : V r A B E)
 
            -- Glue values
          -- | VGlue Val (System Val)
@@ -363,37 +363,35 @@ instance Show Ter where
 
 showTer :: Ter -> Doc
 showTer v = case v of
-  U                  -> char 'U'
-  App e0 e1          -> showTer e0 <+> showTer1 e1
-  Pi e0              -> text "Pi" <+> showTer e0
-  Lam x t e          -> char '\\' <> parens (text x <+> colon <+> showTer t) <+>
-                          text "->" <+> showTer e
-  Fst e              -> showTer1 e <> text ".1"
-  Snd e              -> showTer1 e <> text ".2"
-  Sigma e0           -> text "Sigma" <+> showTer1 e0
-  Pair e0 e1         -> parens (showTer e0 <> comma <> showTer e1)
-  Where e d          -> showTer e <+> text "where" <+> showDecls d
-  Var x              -> text x
-  Con c es           -> text c <+> showTers es
-  PCon c a es phis   -> text c <+> braces (showTer a) <+> showTers es
-                        <+> hsep (map ((char '@' <+>) . showII) phis)
-  Split f _ _ _      -> text f
-  Sum _ n _          -> text n
-  HSum _ n _         -> text n
-  Undef{}            -> text "undefined"
-  Hole{}             -> text "?"
-  PathP e0 e1 e2     -> text "PathP" <+> showTers [e0,e1,e2]
-  PLam i e           -> char '<' <> text (show i) <> char '>' <+> showTer e
-  AppII e phi   -> showTer1 e <+> char '@' <+> showII phi
-  HCom r s a ts t  -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
-  Coe r s e t0     -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
-  -- Comp e t ts        -> text "comp" <+> showTers [e,t] <+> text (show ts)
-  V r a b e -> text "V" <+> showII r <+> showTer1 a <+> showTer1 b <+> showTer1 e
-  Vin r m n  -> text "Vin" <+> showII r <+> showTer1 m <+> showTer1 n
-  Vproj r o b e  -> text "Vproj" <+> showII r <+> showTer1 o <+> showTer1 b <+> showTer1 e
-  -- Glue a ts          -> text "Glue" <+> showTer1 a <+> text (show ts)
-  -- GlueElem a ts      -> text "glue" <+> showTer1 a <+> text (show ts)
-  -- UnGlueElem a b ts  -> text "unglue" <+> showTers [a,b] <+> text (show ts)
+  U                    -> char 'U'
+  App e0 e1            -> showTer e0 <+> showTer1 e1
+  Pi e0                -> text "Pi" <+> showTer e0
+  Lam x t e            -> char '\\' <> parens (text x <+> colon <+> showTer t) <+> text " ->" <+> showTer e
+  Fst e                -> showTer1 e <> text ".1"
+  Snd e                -> showTer1 e <> text ".2"
+  Sigma e0             -> text "Sigma" <+> showTer1 e0
+  Pair e0 e1           -> parens (showTer e0 <> comma <> showTer e1)
+  Where e d            -> showTer e <+> text "where" <+> showDecls d
+  Var x                -> text x
+  Con c es             -> text c <+> showTers es
+  PCon c a es phis     -> text c <+> braces (showTer a) <+> showTers es <+> hsep (map ((char '@' <+>) . showII) phis)
+  Split f _ _ _        -> text f
+  Sum _ n _            -> text n
+  HSum _ n _           -> text n
+  Undef{}              -> text "undefined"
+  Hole{}               -> text "?"
+  PathP e0 e1 e2       -> text "PathP" <+> showTers [e0,e1,e2]
+  PLam i e             -> char '<' <> text (show i) <> char '>' <+> showTer e
+  AppII e phi          -> showTer1 e <+> char '@' <+> showII phi
+  HCom r s a ts t      -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
+  Coe r s e t0         -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
+  -- Comp e t ts       -> text "comp" <+> showTers [e,t] <+> text (show ts)
+  V r a b e            -> text "V" <+> showII r <+> showTer1 a <+> showTer1 b <+> showTer1 e
+  Vin r m n            -> text "Vin" <+> showII r <+> showTer1 m <+> showTer1 n
+  Vproj r o a b e      -> text "Vproj" <+> showII r <+> showTer1 o <+> showTer1 a <+> showTer1 b <+> showTer1 e
+  -- Glue a ts         -> text "Glue" <+> showTer1 a <+> text (show ts)
+  -- GlueElem a ts     -> text "glue" <+> showTer1 a <+> text (show ts)
+  -- UnGlueElem a b ts -> text "unglue" <+> showTers [a,b] <+> text (show ts)
 
 showTers :: [Ter] -> Doc
 showTers = hsep . map showTer1
@@ -425,37 +423,36 @@ instance Show Val where
 
 showVal :: Val -> Doc
 showVal v = case v of
-  VU                -> char 'U'
-  Ter t@Sum{} rho   -> showTer t <+> showEnv False rho
-  Ter t@HSum{} rho  -> showTer t <+> showEnv False rho
-  Ter t@Split{} rho -> showTer t <+> showEnv False rho
-  Ter t rho         -> showTer1 t <+> showEnv True rho
-  VCon c us         -> text c <+> showVals us
-  VPCon c a us phis -> text c <+> braces (showVal a) <+> showVals us
-                       <+> hsep (map ((char '@' <+>) . showII) phis)
-  VHCom r s v0 vs v1 -> text "hcom" <+> showII r <> text "->" <> showII s <+> showVal1 v0 <+> text (show vs) <+> showVal1 v1
-  VCoe r s u v0   -> text "coe" <+> showII r <> text "->" <> showII s <+> showVal1 u <+> showVal1 v0
+  VU                     -> char 'U'
+  Ter t@Sum{} rho        -> showTer t <+> showEnv False rho
+  Ter t@HSum{} rho       -> showTer t <+> showEnv False rho
+  Ter t@Split{} rho      -> showTer t <+> showEnv False rho
+  Ter t rho              -> showTer1 t <+> showEnv True rho
+  VCon c us              -> text c <+> showVals us
+  VPCon c a us phis      -> text c <+> braces (showVal a) <+> showVals us <+> hsep (map ((char '@' <+>) . showII) phis)
+  VHCom r s v0 vs v1     -> text "hcom" <+> showII r <> text "->" <> showII s <+> showVal1 v0 <+> text (show vs) <+> showVal1 v1
+  VCoe r s u v0          -> text "coe" <+> showII r <> text "->" <> showII s <+> showVal1 u <+> showVal1 v0
   VPi a l@(VLam x t b)
     | "_" `isPrefixOf` x -> showVal1 a <+> text "->" <+> showVal1 b
     | otherwise          -> char '(' <> showLam v
-  VPi a b           -> text "Pi" <+> showVals [a,b]
-  VPair u v         -> parens (showVal u <> comma <> showVal v)
-  VSigma u v        -> text "Sigma" <+> showVals [u,v]
-  VApp u v          -> showVal u <+> showVal1 v
-  VLam{}            -> text "\\(" <> showLam v
-  VPLam{}           -> char '<' <> showPLam v
-  VSplit u v        -> showVal u <+> showVal1 v
-  VVar x _          -> text x
-  VOpaque x _       -> text ('#':x)
-  VFst u            -> showVal1 u <> text ".1"
-  VSnd u            -> showVal1 u <> text ".2"
-  VPathP v0 v1 v2   -> text "PathP" <+> showVals [v0,v1,v2]
-  VAppII v phi -> showVal v <+> char '@' <+> showII phi
-  VV r a b e -> text "V" <+> showII r <+> showVal1 a <+> showVal1 b <+> showVal1 e
-  VVin r m n  -> text "Vin" <+> showII r <+> showVal1 m <+> showVal1 n
-  VVproj r o b e  -> text "Vproj" <+> showII r <+> showVal1 o <+> showVal1 b <+> showVal1 e  
-  -- VGlue a ts        -> text "Glue" <+> showVal1 a <+> text (show ts)
-  -- VGlueElem a ts    -> text "glue" <+> showVal1 a <+> text (show ts)
+  VPi a b                -> text "Pi" <+> showVals [a,b]
+  VPair u v              -> parens (showVal u <> comma <> showVal v)
+  VSigma u v             -> text "Sigma" <+> showVals [u,v]
+  VApp u v               -> showVal u <+> showVal1 v
+  VLam{}                 -> text "\\(" <> showLam v
+  VPLam{}                -> char '<' <> showPLam v
+  VSplit u v             -> showVal u <+> showVal1 v
+  VVar x _               -> text x
+  VOpaque x _            -> text ('#':x)
+  VFst u                 -> showVal1 u <> text ".1"
+  VSnd u                 -> showVal1 u <> text ".2"
+  VPathP v0 v1 v2        -> text "PathP" <+> showVals [v0,v1,v2]
+  VAppII v phi           -> showVal v <+> char '@' <+> showII phi
+  VV r a b e             -> text "V" <+> showII r <+> showVal1 a <+> showVal1 b <+> showVal1 e
+  VVin r m n             -> text "Vin" <+> showII r <+> showVal1 m <+> showVal1 n
+  VVproj r o a b e       -> text "Vproj" <+> showII r <+> showVal1 o <+> showVal1 a <+> showVal1 b <+> showVal1 e  
+  -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
+  -- VGlueElem a ts      -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
   -- VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b]
   --                        <+> text (show es)
