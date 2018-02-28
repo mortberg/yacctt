@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module Eval where
 
+import Debug.Trace
+
 import Data.List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -624,22 +626,22 @@ coe i r s a u = case a of
 
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Val
-vvcoe i j r s a b e u | i /= j =
+vvcoe i j r s a b e u | i /= j = trace "vvcoe i != j" $
   let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
                       ,(j~>1,coe i r (Name i) b u)]
       (ar,br,er) = (a,b,e) `subst` (i,r)
   in vin (Name j)
          (coe i r s a u)
          (com i r s b tvec (vproj (Name j) u ar br er))
-vvcoe j _ (Dir Zero) s a b e u =
+vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $
   vin s u (coe j 0 s b (app (equivFun e `subst` (j,0)) u))
-vvcoe j _ (Dir One) s a b e u =
+vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $
   let otm = fstVal (app (equivContr e `subst` (j,s)) (coe j 1 s b u))
       psys = mkSystem [(s~>0,sndVal otm)
                       ,(s~>1,VPLam (N "_") (coe j 1 s b u))]
       ptm = hcomLine 1 0 (b `subst` (j,s)) psys (coe j 1 s b u)
   in vin s (fstVal otm) ptm
-vvcoe j _ (Name i) s a b e u =
+vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $
   let k:l:_ = freshs (Name j,Name i,s,(a,b,e),u)
       (ak,bk,ek) = (a,b,e) `swap` (j,k)
       otm eps = vproj (Name k) (coe j eps (Name k) (vtype (Name j) a b e) u) ak bk ek
