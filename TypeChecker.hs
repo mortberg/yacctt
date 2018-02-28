@@ -212,7 +212,18 @@ check a t = case (a,t) of
       va <- evalTyping a
       vb <- evalTyping b
       checkEquiv va vb e    
-  (VV r a b e,Vin s m n) -> undefined
+  (VV i a b e,Vin s m n) -> do
+    checkII s
+    unless (Name i == s) $
+      throwError $ "The names " ++ show i ++ " " ++ show s ++ " do not match in Vin"
+    check b n
+    local (substEnv (eqn (s,0))) $ do
+      check a m
+      vm <- evalTyping m
+      vn <- evalTyping n
+      ns <- asks names
+      unless (conv ns (app (equivFun e) vm) vn) $
+        throwError $ "Vin does not match V type"
   -- (VU,Glue a ts) -> do
   --   check VU a
   --   rho <- asks env
