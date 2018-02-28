@@ -469,6 +469,8 @@ hcom i r s a (Sys us) u0   = case a of
         u1hcom = hcom i r s a us1 u1
     in VPair u1hcom (com i r s (app b (u1fill `swap` (i,j))) us2 u2) -- TODO: test the swap
   -- VU -> error "hcom U"
+  -- Ter (Sum _ n nass) env
+  --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
   VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
