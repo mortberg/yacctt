@@ -347,22 +347,22 @@ app u v = case (u,v) of
     -- _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
                     -> VSplit u v
-  (VCoe r s (VPLam i (VPi a b)) u0, v) ->
+  (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $
     let w = coe i s (Name i) a v
         w0 = coe i s r a v
     in coe i r s (app b w) (app u0 w0)
     -- Paranoid version:
     -- let j = fresh (u,v)
     --     (aij,bij) = (a,b) `swap` (i,j)
-    --     w = coe j s (Name i) aij v
-    --     w0 = coe j s r aij v
+    --     w = coe i s (Name j) a v
+    --     w0 = coe i s r a v
     -- in coe j r s (app bij w) (app u0 w0)
-  (VHCom r s (VPi a b) (Sys us) u0, v) ->
-    let i = fresh (u,v)
-    in hcom i r s
-            (app b v)
-            (Sys (Map.mapWithKey (\al ual -> app (ual @@ i) (v `subst` toSubst al)) us))
-            (app u0 v)
+  (VHCom r s (VPi a b) (Sys us) u0, v) -> undefined -- trace "hcom pi" $
+    -- let i = fresh (u,v)
+    -- in hcom i r s
+    --         (app b v)
+    --         (Sys (Map.mapWithKey (\al ual -> app (ual @@ i) (v `subst` toSubst al)) us))
+    --         (app u0 v)
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv" -- TODO: rewrite it instead of implementing
 --  _ | isNeutral u       -> VApp u v
   _                     -> VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
@@ -419,9 +419,9 @@ v @@ phi -- | isNeutral v
 -- v @@ phi                   = error $ "(@@): " ++ show v ++ " should be neutral."
 
 -- Applying a *fresh* name.
-(@@@) :: Val -> Name -> Val
-(VPLam i u) @@@ j = u `swap` (i,j)
-v @@@ j           = VAppII v (toII j)
+-- (@@@) :: Val -> Name -> Val
+-- (VPLam i u) @@@ j = u `swap` (i,j)
+-- v @@@ j           = VAppII v (toII j)
 
 
 -------------------------------------------------------------------------------
@@ -454,18 +454,29 @@ hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
 hcom _ r s _ _ u0 | r == s = u0
 hcom _ r s _ (Triv u) _    = u @@ s
 hcom i r s a (Sys us) u0   = case a of
-  VPathP p v0 v1 ->
+  -- Does this make any sense?
+  -- VPathP (VPLam j a) v0 v1 -> trace "hcom path" $
+  --   VPLam j $ hcom i r s a
+  --                (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
+  --                (u0 @@ j)
+  VPathP p v0 v1 -> trace "hcom path" $
     let j = fresh (Name i,r,s,a,Sys us,u0)
-    in VPLam j $ hcom i r s (p @@ j)
+    in VPLam j $ hcom i r s (p @@ j) -- or should it be (p @@ i) ??
                    (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
                    (u0 @@ j)
-  VSigma a b ->
-    let j = fresh (Name i,r,s,(a,b),Sys us,u0)
-        (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
+  VSigma a b -> trace "hcom sigma" $
+    let (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
         (u1,u2) = (fstVal u0,sndVal u0)
-        u1fill = hcom i r (Name j) a us1 u1
+        u1fill = hcom i r (Name i) a us1 u1
         u1hcom = hcom i r s a us1 u1
-    in VPair u1hcom (com i r s (app b (u1fill `swap` (i,j))) us2 u2) -- TODO: test the swap
+    in VPair u1hcom (com i r s (app b u1fill) us2 u2)
+    -- Paranoid version:
+    -- let j = fresh (Name i,r,s,(a,b),Sys us,u0)
+    --     (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
+    --     (u1,u2) = (fstVal u0,sndVal u0)
+    --     u1fill = hcom i r (Name j) a us1 u1
+    --     u1hcom = hcom i r s a us1 u1
+    -- in VPair u1hcom (com i r s (app b (u1fill `swap` (i,j))) us2 u2) -- TODO: test the swap
   -- VU -> error "hcom U"
   -- Ter (Sum _ n nass) env
   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
@@ -601,10 +612,11 @@ coeLine r s a u = coe i r s (a @@ i) u
 coe :: Name -> II -> II -> Val -> Val -> Val
 coe i r s a u | r == s = u
 coe i r s a u = case a of
-  VPathP a v0 v1 ->
+  VPathP a v0 v1 -> trace "coe path" $
     let j = fresh (Name i,r,s,a,(v0,v1),u)
-    in VPLam j $ com i r s (a @@ j) (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
-  VSigma a b ->
+    in VPLam j $ com i r s (a @@ i)  -- TODO: should it be a @@ i or a @@ j?
+                     (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
+  VSigma a b -> trace "coe sigma" $
     let (u1,u2) = (fstVal u, sndVal u)
         u1'     = coe i r (Name i) a u1
         -- Paranoid version:
@@ -812,9 +824,8 @@ vin (Name i) m n = VVin i m n
 vproj :: II -> Val -> Val -> Val -> Val -> Val
 vproj (Dir Zero) o _ _ e = app (equivFun e) o -- TODO: rewrite equivFun
 vproj (Dir One) o _ _ _ = o
-vproj (Name i) (VVin j m n) _ _ _
-  | i == j = n
-  | otherwise = error "vproj"
+vproj (Name i) x@(VVin j m n) _ _ _ | i == j = n
+                                    | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
 vproj (Name i) o a b e = VVproj i o a b e
 
 

@@ -259,6 +259,10 @@ propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
   \(u0 u1 : isEquiv A B f) ->
   <i> \(y : B) -> propIsContr (fiber A B f y) (u0 y) (u1 y) @ i
 
+
+
+
+
 -- propIsEquiv with connections
 -- propIsEquivConn (A B : U) (f : A -> B) : prop (isEquiv A B f) =
 --   \(u0 u1 : isEquiv A B f) ->

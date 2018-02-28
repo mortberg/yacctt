@@ -446,19 +446,16 @@ checkPLam v t = do
 
 checkPLamSystem :: II -> Ter -> Val -> System Ter -> Typing ()
 checkPLamSystem r u0 va (Sys us) = do
-  rho <- asks env
   T.sequence $ Map.mapWithKey (\eqn u ->
     local (substEnv eqn) $ do
       rhoeqn <- asks env
       checkPLam (va `subst` toSubst eqn) u
       unlessM (eval rhoeqn u @@ r === eval rhoeqn u0) $
-        throwError $ "Incompatible system " ++ show us ++
-                     ", component\n " ++ show eqn ++
-                     "\nincompatible with\n " ++ show u0 ++
-                     "\na @ r = " ++ show (va @@ r) ++
-                     "\nu0eqn = " ++ show (eval rhoeqn u0) ++
-                     "\nva = " ++ show va) us
+        throwError $ "\nThe face " ++ show eqn ++ " of the system\n" ++ show (Sys us) ++
+                     "\ndoes not match " ++ show (eval rhoeqn u0) ++
+                     "\nthe value at " ++ show eqn ++ " is " ++ show (eval rhoeqn u @@ r) ++ " when applied to " ++ show r) us
   -- Check that the system ps is compatible.
+  rho <- asks env
   checkCompSystem (evalSystem rho (Sys us))
 checkPLamSystem r u0 va (Triv u) = do
   rho <- asks env
