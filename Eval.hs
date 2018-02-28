@@ -2,10 +2,6 @@
 module Eval where
 
 import Data.List
-import Data.Maybe (fromMaybe)
-import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey
-                ,elems,intersectionWith,intersection,keys
-                ,member,notMember,empty)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -441,7 +437,7 @@ com _ _ s _ (Triv u) _  = u @@ s
 com i r s a (Sys us) u0 =
   hcom i r s
        (a `subst` (i,s))
-       (Sys (mapWithKey (\al ual -> coe i (Name i) s (a `subst` toSubst al) ual) us))
+       (Sys (Map.mapWithKey (\al ual -> coe i (Name i) s (a `subst` toSubst al) ual) us))
        (coe i r s a u0)
 
 -- hcom
@@ -997,9 +993,9 @@ class Convertible a where
 isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Bool
 isCompSystem ns (Triv _) = True
 isCompSystem ns (Sys us) = and [ conv ns (getFace alpha beta) (getFace beta alpha)
-                               | (alpha,beta) <- allCompatible (keys us) ]
+                               | (alpha,beta) <- allCompatible (Map.keys us) ]
   where
-  getFace a b = us ! a `subst` toSubst (b `subst` toSubst a)
+  getFace a b = us Map.! a `subst` toSubst (b `subst` toSubst a)
 
     -- -- TODO: Double check the special cases with diagonal constraints
     -- getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
@@ -1102,8 +1098,8 @@ instance Convertible a => Convertible [a] where
 
 instance Convertible a => Convertible (System a) where
   conv ns (Triv u) (Triv u') = conv ns u u'
-  conv ns (Sys us) (Sys us') = keys us == keys us' &&
-                               and (elems (intersectionWith (conv ns) us us'))
+  conv ns (Sys us) (Sys us') = Map.keys us == Map.keys us' &&
+                               and (Map.elems (Map.intersectionWith (conv ns) us us'))
 
 instance Convertible II where
   conv _ r s = r == s

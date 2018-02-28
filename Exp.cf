@@ -91,6 +91,4 @@ terminator nonempty PTele "" ;
 position token AIdent ('_')|(letter)(letter|digit|'\''|'_')*|('!')(digit)* ;
 separator AIdent "" ;
 
-token CIdent '/''\\' ;
-
 position token HoleIdent '?' ;

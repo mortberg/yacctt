@@ -4,10 +4,8 @@ module CTT where
 import Control.Applicative
 import Data.List
 import Data.Maybe
-import Data.Map (Map,(!),filterWithKey,elems)
 import qualified Data.Map as Map
 import Text.PrettyPrint as PP
-import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Cartesian
@@ -258,7 +256,7 @@ instance Eq Ctxt where
 -- lists. This is more efficient because acting on an environment now
 -- only need to affect the lists and not the whole context.
 -- The last list is the list of opaque names
-newtype Env = Env (Ctxt,[Val],[II],Nameless (Set Ident))
+newtype Env = Env (Ctxt,[Val],[II],Nameless (Set.Set Ident))
   deriving (Eq)
 
 emptyEnv :: Env
@@ -386,9 +384,9 @@ showTer v = case v of
   HCom r s a ts t      -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
   Coe r s e t0         -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
   -- Comp e t ts       -> text "comp" <+> showTers [e,t] <+> text (show ts)
-  V r a b e            -> text "V" <+> showII r <+> showTer1 a <+> showTer1 b <+> showTer1 e
-  Vin r m n            -> text "Vin" <+> showII r <+> showTer1 m <+> showTer1 n
-  Vproj r o a b e      -> text "Vproj" <+> showII r <+> showTer1 o <+> showTer1 a <+> showTer1 b <+> showTer1 e
+  V r a b e            -> text "V" <+> showII r <+> showTers [a,b,e]
+  Vin r m n            -> text "Vin" <+> showII r <+> showTers [m,n]
+  Vproj r o a b e      -> text "Vproj" <+> showII r <+> showTers [o,a,b,e]
   -- Glue a ts         -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts     -> text "glue" <+> showTer1 a <+> text (show ts)
   -- UnGlueElem a b ts -> text "unglue" <+> showTers [a,b] <+> text (show ts)
@@ -448,9 +446,9 @@ showVal v = case v of
   VSnd u                 -> showVal1 u <> text ".2"
   VPathP v0 v1 v2        -> text "PathP" <+> showVals [v0,v1,v2]
   VAppII v phi           -> showVal v <+> char '@' <+> showII phi
-  VV i a b e             -> text "V" <+> text (show i) <+> showVal1 a <+> showVal1 b <+> showVal1 e
-  VVin i m n             -> text "Vin" <+> text (show i) <+> showVal1 m <+> showVal1 n
-  VVproj i o a b e       -> text "Vproj" <+> text (show i) <+> showVal1 o <+> showVal1 a <+> showVal1 b <+> showVal1 e  
+  VV i a b e             -> text "V" <+> text (show i) <+> showVals [a,b,e]
+  VVin i m n             -> text "Vin" <+> text (show i) <+> showVals [m,n]
+  VVproj i o a b e       -> text "Vproj" <+> text (show i) <+> showVals [o,a,b,e]
   -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
   -- VGlueElem a ts      -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
