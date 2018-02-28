@@ -1,0 +1,30 @@
+module bool where
+
+import prelude
+
+data bool = false | true
+
+negBool : bool -> bool = split
+  false -> true
+  true  -> false
+
+-- negBool is involutive:
+negBoolK : (b : bool) -> Path bool (negBool (negBool b)) b = split
+  false -> <i> false
+  true  -> <i> true
+
+ctr (b : bool) : fiber bool bool negBool b = (negBool b,negBoolK b)
+
+contr : (b : bool) (x y : fiber bool bool negBool b) -> Path (fiber bool bool negBool b) x y = undefined -- split
+  -- false -> \(x y : (b' : bool) * Path bool (negBool b') false) -> ?
+  -- true -> \(x y : fiber bool bool negBool true) -> ?
+
+negBoolEquivInhProp : equivInhProp bool bool = (negBool,\(b : bool) -> (ctr b,contr b))
+
+negBoolEquiv : equiv bool bool = equivInhPropToEquiv bool bool negBoolEquivInhProp
+
+pathNegbool : Path U bool bool = ua bool bool negBoolEquiv
+
+test0 : bool = coe 0->1 pathNegbool false
+-- foo : Z = coe 0->1 pathSucZ (pos zero)
+-- bar : Z = coe 1->0 pathSucZ (pos zero)

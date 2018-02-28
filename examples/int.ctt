@@ -1,0 +1,140 @@
+module int where
+
+import hedberg
+
+data nat = zero | suc (n : nat)
+
+pred : nat -> nat = split
+  zero -> zero
+  suc n -> n
+
+data Z = pos (n : nat) | neg (n : nat)
+
+predZ : Z -> Z = split
+  pos u -> auxpredZ u
+    where
+    auxpredZ : nat -> Z = split
+      zero  -> neg zero
+      suc n -> pos n
+  neg v -> neg (suc v)
+
+sucZ : Z -> Z = split
+  pos u -> pos (suc u)
+  neg v -> auxsucZ v
+    where
+    auxsucZ : nat -> Z = split
+      zero  -> pos zero
+      suc n -> neg n
+
+predsucZ : (x : Z) -> Path Z (predZ (sucZ x)) x = split
+  pos u -> <_> pos u
+  neg v -> lem v
+   where
+    lem : (u : nat) -> Path Z (predZ (sucZ (neg u))) (neg u) = split
+      zero  -> <_> neg zero
+      suc n -> <_> neg (suc n)
+
+sucpredZ : (x : Z) -> Path Z (sucZ (predZ x)) x = split
+  pos u -> lem u
+   where
+    lem : (u : nat) -> Path Z (sucZ (predZ (pos u))) (pos u) = split
+      zero  -> <_> pos zero
+      suc n -> <_> pos (suc n)
+  neg v -> <_> neg v
+
+
+
+caseNat (A : U) (a0 aS : A) : nat -> A = split
+ zero -> a0
+ suc n -> aS
+
+caseDNat (P:nat -> U) (a0 :P zero) (aS : (n:nat) -> P (suc n))
+            : (n:nat) -> P n = split
+ zero -> a0
+ suc n -> aS n
+
+znots (n : nat) : not (Path nat zero (suc n)) =
+  \(h : Path nat zero (suc n)) -> subst nat (caseNat U nat N0) zero (suc n) h zero
+
+snotz (n : nat) : not (Path nat (suc n) zero) =
+  \(h : Path nat (suc n) zero) -> znots n (sym nat (suc n) zero h)
+
+sucInj (n m : nat) (p : Path nat (suc n) (suc m)) : Path nat n m =
+ <i> pred (p @ i)
+
+discreteNat : discrete nat = split
+ zero -> caseDNat (\(m : nat) -> dec (Path nat zero m)) (inl (<_> zero)) (\(m : nat) -> inr (znots m))
+ suc n -> caseDNat (\(m : nat) -> dec (Path nat (suc n) m)) (inr (snotz n))
+   (\(m : nat) -> decEqCong (Path nat n m) (Path nat (suc n) (suc m)) (\(p : Path nat n m) -> <i> suc (p @ i))
+                  (sucInj n m) (discreteNat n m))
+
+posNotneg (a b : nat) (h : Path Z (pos a) (neg b)) : N0 = subst Z T (pos a) (neg b) h tt
+  where
+  T : Z -> U = split
+       pos _ -> Unit
+       neg _ -> N0
+
+negNotpos (a b : nat) (h : Path Z (neg b) (pos a)) : N0 = subst Z T (neg b) (pos a) h tt
+  where
+  T : Z -> U = split
+       pos _ -> N0
+       neg _ -> Unit
+
+injPos (a b : nat) (h : Path Z (pos a) (pos b)) : Path nat a b =
+ subst Z T (pos a) (pos b) h (<_> a)
+ where
+   T : Z -> U = split
+        pos c -> Path nat a c
+        neg _ -> N0
+
+injNeg (a b : nat) (h : Path Z (neg a) (neg b)) : Path nat a b =
+  subst Z T (neg a) (neg b) h (<_> a)
+  where
+    T : Z -> U = split
+         pos _ -> N0
+         neg c -> Path nat a c
+
+discreteZ : discrete Z = split
+  pos a -> split@((z1 : Z) -> dec (Path Z (pos a) z1)) with
+             pos a1 -> let rem : dec (Path nat a a1) -> dec (Path Z (pos a) (pos a1)) = split
+                             inl p -> inl (<i> pos (p @ i))
+                             inr h -> inr (\(p : Path Z (pos a) (pos a1)) -> h (injPos a a1 p))
+                       in rem (discreteNat a a1)
+             neg b -> inr (posNotneg a b)
+  neg b -> split@((z1 : Z) -> dec (Path Z (neg b) z1)) with
+             pos a -> inr (negNotpos a b)
+             neg b1 -> let rem : dec (Path nat b b1) -> dec (Path Z (neg b) (neg b1)) = split
+                             inl p -> inl (<i> neg (p @ i))
+                             inr h -> inr (\(p : Path Z (neg b) (neg b1)) -> h (injNeg b b1 p))
+                       in rem (discreteNat b b1)
+
+ZSet : set Z = hedberg Z discreteZ
+
+
+ctr (y : Z) : fiber Z Z sucZ y = (predZ y,<i> sucpredZ y @ i)
+
+gengoal (A : U) (hA : set A) (x y : A) (p : Path A y x) : (z : A) (r : Path A y z) (q : Path A z x) ->
+  PathP (<i> Path A (r @ i) x) p q =
+  J A y (\(z : A) (r : Path A y z) -> (q : Path A z x) -> PathP (<i> Path A (r @ i) x) p q)
+   (hA y x p)
+
+contr (y : Z) (y' : fiber Z Z sucZ y) : Path (fiber Z Z sucZ y) y' (ctr y) =
+  let p1 : Path Z y'.1 (predZ y) = undefined
+      prf1 : Path Z (sucZ y'.1) (sucZ (predZ y)) = <i> sucZ (p1 @ i)
+      prf2 : Path Z (sucZ (predZ y)) y = sucpredZ y
+      p2 : PathP (<i> Path Z (prf1 @ i) y) y'.2 prf2 =
+          gengoal Z ZSet y (sucZ y'.1) y'.2 (sucZ (predZ y)) prf1 prf2
+  in <i> (p1 @ i,p2 @ i)
+
+equivSucZ : equiv Z Z = (sucZ,\(y : Z) -> (ctr y,contr y))
+
+pathSucZ : Path U Z Z = ua Z Z equivSucZ
+
+foo : Z = coe 0->1 pathSucZ (pos zero)
+bar : Z = coe 1->0 pathSucZ (pos zero)
+prf : PathP (<i> ua Z Z equivSucZ @ i) bar (pos zero) = <i> coe 1->i pathSucZ (pos zero)
+nprf : PathP (<i> ua Z Z equivSucZ @ i) bar (pos zero) =
+  <i> Vin i (neg zero) (hcom 1->0 Z [ (i = 0) -> <_> pos zero, (i = 1) -> <_> pos zero ] (pos zero))
+
+
+
