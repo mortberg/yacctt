@@ -119,7 +119,8 @@ gengoal (A : U) (hA : set A) (x y : A) (p : Path A y x) : (z : A) (r : Path A y 
    (hA y x p)
 
 contr (y : Z) (y' : fiber Z Z sucZ y) : Path (fiber Z Z sucZ y) y' (ctr y) =
-  let p1 : Path Z y'.1 (predZ y) = undefined
+  let p1 : Path Z y'.1 (predZ y) =
+        <i> hcom 0->1 Z [(i=0) -> predsucZ y'.1,(i=1) -> <j> predZ (y'.2 @ j)] (predZ (sucZ y'.1))
       prf1 : Path Z (sucZ y'.1) (sucZ (predZ y)) = <i> sucZ (p1 @ i)
       prf2 : Path Z (sucZ (predZ y)) y = sucpredZ y
       p2 : PathP (<i> Path Z (prf1 @ i) y) y'.2 prf2 =
