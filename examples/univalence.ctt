@@ -1,0 +1,59 @@
+module univalence where
+
+import prelude
+
+-- ua (A B : U) (e : equiv A B) : Path U A B =
+--   <i> V i A B (equivToEquivInhProp A B e)
+
+-- uabeta (A B : U) (e : equiv A B) (a : A) :
+--   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
+--   <i> coe i->1 (<_> B) (e.1 a)
+
+
+retract (A B : U) (f : A -> B) (g : B -> A) : U = (a : A) -> Path A (g (f a)) a
+
+pathToEquiv (A B : U) (p : Path U A B) : equiv A B =
+  coe 0->1 (<i> equiv A (p @ i)) (idEquiv A)
+  -- Normal form (typechecks):
+  -- (coe 0->1 (<i1240> A -> (p @ i1240)) (\(a : A) -> a),coe 0->1 (<i1240> (b : p @ i1240) -> Sigma (Sigma A (\(a : A) -> PathP (<i1242> p @ i1240) (coe 0->i1240 (<i1240> p @ i1240) (coe i1240->0 (<i1240> A) a)) b)) (\(x : Sigma A (\(a : A) -> PathP (<i1243> p @ i1240) (coe 0->i1240 (<i1240> p @ i1240) (coe i1240->0 (<i1240> A) a)) b)) -> (y : Sigma A (\(a : A) -> PathP (<i1244> p @ i1240) (coe 0->i1240 (<i1240> p @ i1240) (coe i1240->0 (<i1240> A) a)) b)) -> PathP (<i1245> Sigma A (\(a : A) -> PathP (<i1246> p @ i1240) (coe 0->i1240 (<i1240> p @ i1240) (coe i1240->0 (<i1240> A) a)) b)) y x)) (\(a : A) -> ((a,<i1254> a),\(f : Sigma A (\(a0 : A) -> PathP (<i1247> A) a0 a)) -> <i1248> (hcom 1->0 A [ (i1248 = 0) -> <i1252> f.2 @ i1252, (i1248 = 1) -> <i1252> a ] a,<i1249> hcom 1->i1249 A [ (i1248 = 0) -> <i1250> f.2 @ i1250, (i1248 = 1) -> <i1250> a ] a))))
+
+-- normal form does not work. lemSig and propIsEquiv works
+equivLemma (A B : U) : (v w : equiv A B) -> Path (A -> B) v.1 w.1 -> Path (equiv A B) v w =
+  lemSig (A -> B) (isEquiv A B) (propIsEquiv A B)
+
+uaret (A B : U) : retract (equiv A B) (Path U A B) (ua A B) (pathToEquiv A B) =
+  \(e : equiv A B) ->
+    let rem : Path (A -> B) (pathToEquiv A B (ua A B e)).1 e.1 = undefined
+    in equivLemma A B (pathToEquiv A B (ua A B e)) e rem -- (<i> \(a : A) -> uabeta A B e (coe 1->i (<_> A) a))
+
+-- uaret has an undefined
+opaque uaret
+
+isContrPath (A : U) : isContr ((B : U) * Path U A B) =
+  ((A,<_> A),\(bp : (B : U) * Path U A B) -> <i> (hcom 0->1 U [(i=0) -> bp.2,(i=1) -> <_> A ] A
+                                                 ,<j> hcom 0->j U [(i=0) -> bp.2,(i=1) -> <_> A ] A))
+
+-- hcom U is not implemented yet
+opaque isContrPath
+
+retIsContr (A B : U) (f : A -> B) (g : B -> A)
+           (h : (x : A) -> Path A (g (f x)) x) (v : isContr B) : isContr A = (g b,p)
+  where
+  b : B = v.1
+  q : (y:B) -> Path B y b = v.2
+  p (x: A ) : Path A x (g b) =
+    <i> hcom 0->1 A [(i=1) -> <_> g b, (i=0) -> h x] (g (q (f x) @ i))
+
+f1 (A : U) (p : (B : U) * equiv A B) : ((B : U) * Path U A B) = (p.1,ua A p.1 p.2)
+f2 (A : U) (p : (B : U) * Path U A B) : ((B : U) * equiv A B) = (p.1,pathToEquiv A p.1 p.2)
+
+uaretsig (A : U) : retract ((B : U) * equiv A B) ((B : U) * Path U A B) (f1 A) (f2 A) =
+  \(p : (B : U) * equiv A B) -> <i> (p.1,uaret A p.1 p.2 @ i)
+
+univalence (A : U) : isContr ((B : U) * equiv A B) =
+  retIsContr ((B : U) * equiv A B) ((B : U) * Path U A B)
+     (f1 A) (f2 A) (uaretsig A) (isContrPath A)
+
+-- Normal form does not work even if uaret is opaque
+-- nunivalence (A : U) : isContr ((B : U) * equiv A B) =
+

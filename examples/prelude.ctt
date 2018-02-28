@@ -226,6 +226,14 @@ isEquiv (A B : U) (f : A -> B) : U = (b : B) -> isContr (fiber A B f b)
 
 equiv (A B : U) : U = (f : A -> B) * isEquiv A B f
 
+idfun (A : U) (a : A) : A = a
+
+idEquiv (A : U) : equiv A A =
+  (idfun A,
+  \(a : A) -> ((a,<_> a),
+               \(f : fiber A A (idfun A) a) -> <i> (hcom 1->0 A [(i=0) -> f.2, (i=1) -> <_> a] a
+                                                   ,<j> hcom 1->j A [(i=0) -> f.2,(i=1) -> <_> a] a)))
+
 isEquivInhProp (A B : U) (f : A -> B) : U = (b : B) -> isInhProp (fiber A B f b)
 
 equivInhProp (A B : U) : U = (f : A -> B) * isEquivInhProp A B f
@@ -246,7 +254,7 @@ uabeta (A B : U) (e : equiv A B) (a : A) :
 uabetaNeg (A B : U) (e : equiv A B) (b : B) : A =
   coe 1->0 (ua A B e) b
 
--- propIsEquiv without connections
+-- propIsEquiv without connections. normal form is big, but typechecks
 propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
   \(u0 u1 : isEquiv A B f) ->
   <i> \(y : B) -> propIsContr (fiber A B f y) (u0 y) (u1 y) @ i
