@@ -100,7 +100,7 @@ instance Nominal Val where
     VCon c vs                      -> VCon c (subst vs (i,r))
     VPCon c a vs phis              -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
     VHCom s s' a us u0             -> hcomLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
-    VCoe s s' a u                  -> coeLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
+    VCoe s s' a u                  -> coe (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
     VVar x v                       -> VVar x (subst v (i,r))
     VOpaque x v                    -> VOpaque x (subst v (i,r))
     VAppII u psi                   -> subst u (i,r) @@ subst psi (i,r)
@@ -302,7 +302,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   AppII e phi           -> eval rho e @@ evalII rho phi
   HCom r s a us u0      ->
     hcomLine (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
-  Coe r s a t           -> coeLine (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
+  Coe r s a t           -> coe (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
   V r a b e             -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
   Vin r m n             -> vin (evalII rho r) (eval rho m) (eval rho n)
@@ -348,15 +348,11 @@ app u v = case (u,v) of
   (Ter Split{} _,_) -- | isNeutral v
                     -> VSplit u v
   (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $
-    let w = coe i s (Name i) a v
-        w0 = coe i s r a v
-    in coe i r s (app b w) (app u0 w0)
-    -- Paranoid version:
-    -- let j = fresh (u,v)
-    --     (aij,bij) = (a,b) `swap` (i,j)
-    --     w = coe i s (Name j) a v
-    --     w0 = coe i s r a v
-    -- in coe j r s (app bij w) (app u0 w0)
+    let j = fresh (u,v)
+        bij = b `swap` (i,j)
+        w = coe s (Name j) (VPLam i a) v
+        w0 = coe s r (VPLam i a) v
+    in coe r s (VPLam j (app bij w)) (app u0 w0)
   (VHCom r s (VPi a b) (Sys us) u0, v) -> undefined -- trace "hcom pi" $
     -- let i = fresh (u,v)
     -- in hcom i r s
@@ -435,12 +431,12 @@ comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
 -- TODO: Double check!
 -- i is the dimension that a and us depends on
 com :: Name -> II -> II -> Val -> System Val -> Val -> Val
-com _ _ s _ (Triv u) _  = u @@ s
+com i _ s _ (Triv u) _  = u `subst` (i,s)
 com i r s a (Sys us) u0 =
   hcom i r s
        (a `subst` (i,s))
-       (Sys (Map.mapWithKey (\al ual -> coe i (Name i) s (a `subst` toSubst al) ual) us))
-       (coe i r s a u0)
+       (Sys (Map.mapWithKey (\al ual -> coe (Name i) s (VPLam i (a `subst` toSubst al)) ual) us))
+       (coe r s (VPLam i a) u0)
 
 -- hcom
 hcomLine :: II -> II -> Val -> System Val -> Val -> Val
@@ -452,7 +448,7 @@ hcomLine r s a (Sys us) u0 = hcom i r s a (Sys (Map.map (@@ i) us)) u0
 -- i is the dimension that us depends on
 hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
 hcom _ r s _ _ u0 | r == s = u0
-hcom _ r s _ (Triv u) _    = u @@ s
+hcom i r s _ (Triv u) _    = u `subst` (i,s)
 hcom i r s a (Sys us) u0   = case a of
   -- Does this make any sense?
   -- VPathP (VPLam j a) v0 v1 -> trace "hcom path" $
@@ -604,25 +600,23 @@ hcom i r s a (Sys us) u0   = case a of
 -----------------------------------------------------------
 -- Coe
 
-coeLine :: II -> II -> Val -> Val -> Val
-coeLine r s a u = coe i r s (a @@ i) u
-  where i = fresh (r,s,a,u)
+-- coeLine :: II -> II -> Val -> Val -> Val
+-- coeLine r s a u = coe i r s (a @@ i) u
+--   where i = fresh (r,s,a,u)
 
 -- i is the dimension on which a depends
-coe :: Name -> II -> II -> Val -> Val -> Val
-coe i r s a u | r == s = u
-coe i r s a u = case a of
+coe :: II -> II -> Val -> Val -> Val
+coe r s a u | r == s = u
+coe r s (VPLam i a) u = case a of
   VPathP a v0 v1 -> trace "coe path" $
     let j = fresh (Name i,r,s,a,(v0,v1),u)
-    in VPLam j $ com i r s (a @@ i)  -- TODO: should it be a @@ i or a @@ j?
-                     (mkSystem [(j~>0,v0),(j~>1,v1)]) (u @@ j)
+    in VPLam j $ comLine r s (VPLam i (a @@ j))
+                         (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) (u @@ j)
   VSigma a b -> trace "coe sigma" $
-    let (u1,u2) = (fstVal u, sndVal u)
-        u1'     = coe i r (Name i) a u1
-        -- Paranoid version:
-        -- j = fresh (Name i,r,s,a,u)
-        -- u1' = coe j r (Name i) (a `swap` (i,j)) u1
-    in VPair (coe i r s a u1) (coe i r s (app b u1') u2)
+    let j = fresh (Name i,r,s,a,b,u)
+        (u1,u2) = (fstVal u, sndVal u)
+        u1'     = coe r (Name j) (VPLam i a) u1
+    in VPair (coe r s (VPLam i a) u1) (coe r s (VPLam j (app (b `swap` (i,j)) u1')) u2)
   VPi{} -> VCoe r s (VPLam i a) u
   VU -> u
   VV j a b e -> vvcoe i j r s a b e u
@@ -635,46 +629,47 @@ coe i r s a u = case a of
   -- VTypes
   _ -> -- error "missing case in coe" --
        VCoe r s (VPLam i a) u
+coe r s a u = VCoe r s a u
 
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Val
-vvcoe i j r s a b e u | i /= j = trace "vvcoe i != j" $
-  let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
-                      ,(j~>1,coe i r (Name i) b u)]
-      (ar,br,er) = (a,b,e) `subst` (i,r)
-  in vin (Name j)
-         (coe i r s a u)
-         (com i r s b tvec (vproj (Name j) u ar br er))
-vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $
-  vin s u (coe j 0 s b (app (equivFun e `subst` (j,0)) u))
-vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $
-  let otm = fstVal (app (equivContr e `subst` (j,s)) (coe j 1 s b u))
-      psys = mkSystem [(s~>0,sndVal otm)
-                      ,(s~>1,VPLam (N "_") (coe j 1 s b u))]
-      ptm = hcomLine 1 0 (b `subst` (j,s)) psys (coe j 1 s b u)
-  in vin s (fstVal otm) ptm
-vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $
-  let k:l:_ = freshs (Name j,Name i,s,(a,b,e),u)
-      (ak,bk,ek) = (a,b,e) `swap` (j,k)
-      otm eps = vproj (Name k) (coe j eps (Name k) (vtype (Name j) a b e) u) ak bk ek
-      (ai,bi,ei) = (a,b,e) `subst` (j,Name i)
-      psys = mkSystem [(i~>0,otm 0 `swap` (k,j))
-                      ,(i~>1,otm 1 `swap` (k,j))] -- TODO: remove the swaps?
-      ptm = com j (Name i) (Name j) b psys (vproj (Name i) u ai bi ei)
-      p0 = ptm `subst` (j,0)
-      (a0,b0,e0) = (a,b,e) `subst` (j,0)
-      uvec eps t = mkSystem [(l~>0,app (equivFun e0) (coe i eps (Name i) a0 t))
-                            ,(l~>1,p0)]
-      qtm eps t = VPair (coe i eps (Name i) a0 t)
-                        (VPLam l (com i eps (Name i) b0 (uvec eps t) (p0 `subst` (i,eps))))
-      rtm = app (app (sndVal (app (equivContr e0) p0)) (qtm 0 (u `subst` (i,0))))
-                (qtm 1 (coe j 1 0 (vtype (Name j) a b e) u `subst` (i,1))) @@ i
-      (as,bs,es) = (a,b,e) `subst` (j,s)
-      tvec = mkSystem [(i~>0,otm 0 `subst` (k,s))
-                      ,(i~>1,otm 1 `subst` (k,s))
-                      ,(i~>s,vproj s u as bs es)
-                      ,(s~>0,sndVal rtm)]
-  in vin s (fstVal rtm) (hcom l 1 0 (b `subst` (j,s)) tvec (ptm `subst` (j,s)))
+vvcoe i j r s a b e u | i /= j = undefined -- trace "vvcoe i != j" $
+--   let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
+--                       ,(j~>1,coe i r (Name i) b u)]
+--       (ar,br,er) = (a,b,e) `subst` (i,r)
+--   in vin (Name j)
+--          (coe i r s a u)
+--          (com i r s b tvec (vproj (Name j) u ar br er))
+-- vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $
+--   vin s u (coe j 0 s b (app (equivFun e `subst` (j,0)) u))
+-- vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $
+--   let otm = fstVal (app (equivContr e `subst` (j,s)) (coe j 1 s b u))
+--       psys = mkSystem [(s~>0,sndVal otm)
+--                       ,(s~>1,VPLam (N "_") (coe j 1 s b u))]
+--       ptm = hcomLine 1 0 (b `subst` (j,s)) psys (coe j 1 s b u)
+--   in vin s (fstVal otm) ptm
+-- vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $
+--   let k:l:_ = freshs (Name j,Name i,s,(a,b,e),u)
+--       (ak,bk,ek) = (a,b,e) `swap` (j,k)
+--       otm eps = vproj (Name k) (coe j eps (Name k) (vtype (Name j) a b e) u) ak bk ek
+--       (ai,bi,ei) = (a,b,e) `subst` (j,Name i)
+--       psys = mkSystem [(i~>0,otm 0 `swap` (k,j))
+--                       ,(i~>1,otm 1 `swap` (k,j))] -- TODO: remove the swaps?
+--       ptm = com j (Name i) (Name j) b psys (vproj (Name i) u ai bi ei)
+--       p0 = ptm `subst` (j,0)
+--       (a0,b0,e0) = (a,b,e) `subst` (j,0)
+--       uvec eps t = mkSystem [(l~>0,app (equivFun e0) (coe i eps (Name i) a0 t))
+--                             ,(l~>1,p0)]
+--       qtm eps t = VPair (coe i eps (Name i) a0 t)
+--                         (VPLam l (com i eps (Name i) b0 (uvec eps t) (p0 `subst` (i,eps))))
+--       rtm = app (app (sndVal (app (equivContr e0) p0)) (qtm 0 (u `subst` (i,0))))
+--                 (qtm 1 (coe j 1 0 (vtype (Name j) a b e) u `subst` (i,1))) @@ i
+--       (as,bs,es) = (a,b,e) `subst` (j,s)
+--       tvec = mkSystem [(i~>0,otm 0 `subst` (k,s))
+--                       ,(i~>1,otm 1 `subst` (k,s))
+--                       ,(i~>s,vproj s u as bs es)
+--                       ,(s~>0,sndVal rtm)]
+--   in vin s (fstVal rtm) (hcom l 1 0 (b `subst` (j,s)) tvec (ptm `subst` (j,s)))
         
 
 -- Transport and forward

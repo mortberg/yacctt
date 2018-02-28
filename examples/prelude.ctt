@@ -244,20 +244,21 @@ equivToEquivInhProp (A B : U) (f : equiv A B) : equivInhProp A B =
 equivInhPropToEquiv (A B : U) (f : equivInhProp A B) : equiv A B =
   (f.1,\(b : B) -> isInhPropToIsContr (fiber A B f.1 b) (f.2 b))
 
-ua (A B : U) (e : equiv A B) : Path U A B =
-  <i> V i A B (equivToEquivInhProp A B e)
+-- ua (A B : U) (e : equiv A B) : Path U A B =
+--   <i> V i A B (equivToEquivInhProp A B e)
 
-uabeta (A B : U) (e : equiv A B) (a : A) :
-  Path B (coe 0->1 (ua A B e) a) (e.1 a) =
-  <i> coe i->1 (<_> B) (e.1 a)
+-- uabeta (A B : U) (e : equiv A B) (a : A) :
+--   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
+--   <i> coe i->1 (<_> B) (e.1 a)
 
-uabetaNeg (A B : U) (e : equiv A B) (b : B) : A =
-  coe 1->0 (ua A B e) b
+-- uabetaNeg (A B : U) (e : equiv A B) (b : B) : A =
+--   coe 1->0 (ua A B e) b
 
 -- propIsEquiv without connections. normal form is big, but typechecks
 propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
   \(u0 u1 : isEquiv A B f) ->
   <i> \(y : B) -> propIsContr (fiber A B f y) (u0 y) (u1 y) @ i
+
 
 
 
