@@ -208,7 +208,7 @@ check a t = case (a,t) of
       check VU a
       va <- evalTyping a
       vb <- evalTyping b
-      checkEquiv va vb e    
+      checkEquiv va vb e
   (VV i a b e,Vin s m n) -> do
     checkII s
     unless (Name i == s) $
@@ -460,7 +460,7 @@ checkPLamSystem r u0 va (Triv u) = do
   unlessM (eval rho u @@ r === eval rho u0) $
     throwError ("Trivial system " ++ show (eval rho u @@ r) ++ " at " ++ show r ++
                 "\ndoes not match the cap " ++ show (eval rho u0))
-  
+
 checks :: (Tele,Env) -> [Ter] -> Typing ()
 checks ([],_)         []     = return ()
 checks ((x,a):xas,nu) (e:es) = do
