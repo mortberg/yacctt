@@ -362,7 +362,7 @@ instance Show Ter where
 showTer :: Ter -> Doc
 showTer v = case v of
   U                    -> char 'U'
-  App e0 e1            -> showTer1 e0 <+> showTer1 e1
+  App e0 e1            -> showTer e0 <+> showTer1 e1
   Pi e0                -> text "Pi" <+> showTer e0
   Lam x t e            -> char '\\' <> parens (text x <+> colon <+> showTer t) <+> text " ->" <+> showTer e
   Fst e                -> showTer1 e <> text ".1"

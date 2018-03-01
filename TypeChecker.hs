@@ -5,9 +5,6 @@ import Control.Applicative hiding (empty)
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
--- import Data.Map (Map,(!),mapWithKey,assocs,filterWithKey,elems,keys
---                 ,intersection,intersectionWith,intersectionWithKey
---                 ,toList,fromList)
 import qualified Data.Map as Map
 import qualified Data.Traversable as T
 
@@ -452,8 +449,8 @@ checkPLamSystem r u0 va (Sys us) = do
       checkPLam (va `subst` toSubst eqn) u
       unlessM (eval rhoeqn u @@ r === eval rhoeqn u0) $
         throwError $ "\nThe face " ++ show eqn ++ " of the system\n" ++ show (Sys us) ++
-                     "\ndoes not match " ++ show (eval rhoeqn u0) ++
-                     "\nthe value at " ++ show eqn ++ " is " ++ show (eval rhoeqn u @@ r) ++ " when applied to " ++ show r) us
+                     "\nat " ++ show r ++ " is " ++ show (eval rhoeqn u @@ r) ++
+                     "\nwhich does not match the cap " ++ show (eval rhoeqn u0)) us
   -- Check that the system ps is compatible.
   rho <- asks env
   checkCompSystem (evalSystem rho (Sys us))
@@ -461,8 +458,8 @@ checkPLamSystem r u0 va (Triv u) = do
   rho <- asks env
   checkPLam va u
   unlessM (eval rho u @@ r === eval rho u0) $
-    throwError ("Side " ++ show (eval rho u @@ r) ++
-                " incompatible with base " ++ show (eval rho u0))
+    throwError ("Trivial system " ++ show (eval rho u @@ r) ++ " at " ++ show r ++
+                "\ndoes not match the cap " ++ show (eval rho u0))
   
 checks :: (Tele,Env) -> [Ter] -> Typing ()
 checks ([],_)         []     = return ()

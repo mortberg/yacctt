@@ -267,7 +267,7 @@ eps :: System a
 eps = Sys (Map.empty)
 
 -- relies on (and preserves) System invariant
-insertSystem :: Nominal a => (Eqn,a) -> System a -> System a
+insertSystem :: (Eqn,a) -> System a -> System a
 insertSystem _       (Triv a) = Triv a
 insertSystem (eqn,a) (Sys xs) = case eqn of
   -- equation is always false
@@ -275,12 +275,12 @@ insertSystem (eqn,a) (Sys xs) = case eqn of
   -- equation is always true
   Eqn r s | r == s -> Triv a
   -- otherwise
-  Eqn r s -> Sys (Map.insert eqn (a `subst` toSubst eqn) xs)
+  Eqn r s -> Sys (Map.insert eqn a xs)
 
-insertsSystem :: Nominal a => [(Eqn,a)] -> System a -> System a
+insertsSystem :: [(Eqn,a)] -> System a -> System a
 insertsSystem xs sys = foldr insertSystem sys xs
 
-mkSystem :: Nominal a => [(Eqn,a)] -> System a
+mkSystem :: [(Eqn,a)] -> System a
 mkSystem xs = insertsSystem xs eps
 
 allSystem :: Name -> System a -> System a
@@ -304,17 +304,12 @@ toSubst (Eqn (Name i) r) = (i,r)
 toSubst eqn = error $ "toSubst: encountered " ++ show eqn ++ " in system"
 
 -- carve a using the same shape as the system b
--- relies on Eqn, System invariants
-border :: Nominal a => a -> System b -> System a
-border v (Sys xs) = Sys (Map.mapWithKey (\ir _ -> v `subst` toSubst ir) xs)
+border :: a -> System b -> System a
+border v (Sys xs) = Sys (Map.map (const v) xs)
 border v (Triv _) = Triv v
 
 shape :: System a -> System ()
-shape (Sys xs) = Sys (Map.map (const ()) xs)
-shape (Triv _) = Triv ()
-
-rename :: Nominal a => a -> (Name, Name) -> a
-rename a (i, j) = swap a (i,j)
+shape = border ()
 
 -- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us

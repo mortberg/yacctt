@@ -140,7 +140,7 @@ propIsProp (A : U) : prop (prop A) =
     propSet A f a b (f a b) (g a b) @ i
 
 setIsProp (A : U) : prop (set A) =
- \(f g : set A) -> <i> \(a b :A) ->
+  \(f g : set A) -> <i> \(a b :A) ->
    propIsProp (Path A a b) (f a b) (g a b) @ i
 
 PathS (A : U) (P : A -> U) (a0 a1 : A)
