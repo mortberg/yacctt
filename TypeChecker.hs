@@ -447,7 +447,7 @@ checkPLamSystem r u0 va (Sys us) = do
     local (substEnv eqn) $ do
       rhoeqn <- asks env
       checkPLam (va `subst` toSubst eqn) u
-      unlessM (eval rhoeqn u @@ r === eval rhoeqn u0) $
+      unlessM (eval rhoeqn u @@ evalII rhoeqn r === eval rhoeqn u0) $
         throwError $ "\nThe face " ++ show eqn ++ " of the system\n" ++ show (Sys us) ++
                      "\nat " ++ show r ++ " is " ++ show (eval rhoeqn u @@ r) ++
                      "\nwhich does not match the cap " ++ show (eval rhoeqn u0)) us
