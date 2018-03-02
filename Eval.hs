@@ -99,7 +99,7 @@ instance Nominal Val where
     VSnd u                         -> sndVal (subst u (i,r))
     VCon c vs                      -> VCon c (subst vs (i,r))
     VPCon c a vs phis              -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
-    VHCom s s' a us u0             -> hcomLine (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
+    VHCom s s' a us u0             -> hcom (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
     VCoe s s' a u                  -> coe (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
     VVar x v                       -> VVar x (subst v (i,r))
     VOpaque x v                    -> VOpaque x (subst v (i,r))
@@ -301,7 +301,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
                            in VPLam j (eval (sub (i,Name j) rho) t)
   AppII e phi           -> eval rho e @@ evalII rho phi
   HCom r s a us u0      ->
-    hcomLine (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
+    hcom (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
   Coe r s a t           -> coe (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
   V r a b e             -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
@@ -419,114 +419,48 @@ v @@ phi -- | isNeutral v
 -------------------------------------------------------------------------------
 -- com and hcom
 
--- THIS IS THE OLD CODE
-comLine :: II -> II -> Val -> System Val -> Val -> Val
-comLine r s _ _ u0 | r == s = u0
-comLine _ s _ (Triv u) _  = u @@ s
-comLine r s a (Sys us) u0 = com i r s (a @@ i) (Sys (Map.map (@@ i) us)) u0
-  where i = fresh (r,s,a,Sys us,u0)
+com :: II -> II -> Val -> System Val -> Val -> Val
+com r s a _ u0 | r == s = u0
+com _ s _ (Triv u) _  = u @@ s
+com r s a us u0 =
+  hcom r s (a @@ s) (mapSystem (\j u -> coe (Name j) s a u) us) (coe r s a u0)
 
--- TODO: Double check!
--- i is the dimension that a and us depends on
-com :: Name -> II -> II -> Val -> System Val -> Val -> Val
-com i _ s _ (Triv u) _  = u `subst` (i,s)
-com i r s a (Sys us) u0 =
-  hcom i r s
-       (a `subst` (i,s))
-       (Sys (Map.mapWithKey (\al ual -> coe (Name i) s (VPLam i (a `subst` toSubst al)) ual) us))
-       (coe r s (VPLam i a) u0)
+-- apply f to each face (with its binder), eta-expanding where needed
+mapSystem :: (Name -> Val -> Val) -> System Val -> System Val
+mapSystem f (Triv (VPLam i u)) = Triv (VPLam i (f i u))
+mapSystem f (Triv u) =
+  let j = fresh u
+  in Triv (VPLam j (f j (u @@ j)))
+mapSystem f (Sys us) =
+  let j = fresh (Sys us)
+      etaMap (VPLam i u) = VPLam i (f i u)
+      etaMap u = VPLam j (f j (u @@ j))
+  in Sys $ Map.map etaMap us
 
--- hcom
-hcomLine :: II -> II -> Val -> System Val -> Val -> Val
-hcomLine r s _ _ u0 | r == s = u0
-hcomLine r s a (Triv u) u0 = u @@ s
-hcomLine r s a (Sys us) u0 = hcom i r s a (Sys (Map.map (@@ i) us)) u0
-  where i = fresh (r,s,a,Sys us,u0)
-
--- i is the dimension that us depends on
-hcom :: Name -> II -> II -> Val -> System Val -> Val -> Val
-hcom _ r s _ _ u0 | r == s = u0
-hcom i r s _ (Triv u) _    = u `subst` (i,s)
-hcom i r s a (Sys us) u0   = case a of
-  -- Does this make any sense?
-  -- VPathP (VPLam j a) v0 v1 -> trace "hcom path" $
-  --   VPLam j $ hcom i r s a
-  --                (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
-  --                (u0 @@ j)
-  VPathP p v0 v1 -> trace "hcom path" $
-    let j = fresh (Name i,r,s,a,Sys us,u0)
-    in VPLam j $ hcom i r s (p @@ j) -- or should it be (p @@ i) ??
-                   (insertsSystem [(j~>0,v0),(j~>1,v1)] (Sys (Map.map (@@ j) us)))
+hcom :: II -> II -> Val -> System Val -> Val -> Val
+hcom r s _ _ u0 | r == s = u0
+hcom r s _ (Triv u) _    = u @@ s
+hcom r s a (Sys us) u0   = case a of
+  VPathP a v0 v1 -> trace "hcom path" $
+    let j = fresh (r,s,a,Sys us,u0)
+    in VPLam j $ hcom r s (a @@ j)
+                   (insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)]
+                     (mapSystem (const (@@ j)) (Sys us)))
                    (u0 @@ j)
   VSigma a b -> trace "hcom sigma" $
-    let (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
+    let j = fresh (r,s,a,b,Sys us,u0)
+        (us1,us2) = (mapSystem (const fstVal) (Sys us),mapSystem (const sndVal) (Sys us))
         (u1,u2) = (fstVal u0,sndVal u0)
-        u1fill = hcom i r (Name i) a us1 u1
-        u1hcom = hcom i r s a us1 u1
-    in VPair u1hcom (com i r s (app b u1fill) us2 u2)
-    -- Paranoid version:
-    -- let j = fresh (Name i,r,s,(a,b),Sys us,u0)
-    --     (us1,us2) = (Sys (Map.map fstVal us),Sys (Map.map sndVal us))
-    --     (u1,u2) = (fstVal u0,sndVal u0)
-    --     u1fill = hcom i r (Name j) a us1 u1
-    --     u1hcom = hcom i r s a us1 u1
-    -- in VPair u1hcom (com i r s (app b (u1fill `swap` (i,j))) us2 u2) -- TODO: test the swap
+        u1fill = hcom r (Name j) a us1 u1
+        u1hcom = hcom r s a us1 u1
+    in VPair u1hcom (com r s (VPLam j (app b u1fill)) us2 u2)
   -- VU -> error "hcom U"
   -- Ter (Sum _ n nass) env
   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
-  -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-  VPi{} -> VHCom r s a (Sys (Map.map (VPLam i) us)) u0
-  _ -> -- error "missing case in hcom"
-       VHCom r s a (Sys (Map.map (VPLam i) us)) u0
--- THIS IS THE END OF THE OLD CODE
-
-
-
--- This is the new attempt that has a mysterious bug:
-
--- com :: II -> II -> Val -> System Val -> Val -> Val
--- com r s a _ u0 | r == s = u0
--- com _ s _ (Triv u) _  = u @@ s
--- com r s a us u0 =
---   hcom r s (a @@ s) (mapSystem (\j u -> coe (Name j) s a u) us) (coe r s a u0)
-
--- -- apply f to each face (with its binder), eta-expanding where needed
--- mapSystem :: (Name -> Val -> Val) -> System Val -> System Val
--- mapSystem f (Triv (VPLam i u)) = Triv (VPLam i (f i u))
--- mapSystem f (Triv u) =
---   let j = fresh u
---   in Triv (VPLam j (f j (u @@ j)))
--- mapSystem f (Sys us) =
---   let j = fresh (Sys us)
---       etaMap (VPLam i u) = VPLam i (f i u)
---       etaMap u = VPLam j (f j (u @@ j))
---   in Sys $ Map.map etaMap us
-  
--- hcom :: II -> II -> Val -> System Val -> Val -> Val
--- hcom r s _ _ u0 | r == s = u0
--- hcom r s _ (Triv u) _    = u @@ s
--- hcom r s a (Sys us) u0   = case a of
---   VPathP a v0 v1 -> trace "hcom path" $
---     let j = fresh (r,s,a,Sys us,u0)
---     in VPLam j $ hcom r s (a @@ j)
---                    (insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)]
---                      (mapSystem (const (@@ j)) (Sys us)))
---                    (u0 @@ j)
---   VSigma a b -> trace "hcom sigma" $
---     let j = fresh (r,s,a,b,Sys us,u0)
---         (us1,us2) = (mapSystem (const fstVal) (Sys us),mapSystem (const sndVal) (Sys us))
---         (u1,u2) = (fstVal u0,sndVal u0)
---         u1fill = hcom r (Name j) a us1 u1
---         u1hcom = hcom r s a us1 u1
---     in VPair u1hcom (com r s (VPLam j (app b u1fill)) us2 u2)
---   -- VU -> error "hcom U"
---   -- Ter (Sum _ n nass) env
---   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
---   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
---   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys us) u0
---   VPi{} -> VHCom r s a (Sys us) u0
---   _ -> VHCom r s a (Sys us) u0
+  -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys us) u0
+  VPi{} -> VHCom r s a (Sys us) u0
+  _ -> VHCom r s a (Sys us) u0
 
 -------------------------------------------------------------------------------
 -- Composition and filling
@@ -651,8 +585,8 @@ coe r s a u | r == s = u
 coe r s (VPLam i a) u = case a of
   VPathP a v0 v1 -> trace "coe path" $
     let j = fresh (Name i,r,s,a,(v0,v1),u)
-    in VPLam j $ comLine r s (VPLam i (a @@ j))
-                         (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) (u @@ j)
+    in VPLam j $ com r s (VPLam i (a @@ j))
+                     (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) (u @@ j)
   VSigma a b -> trace "coe sigma" $
     let j = fresh (Name i,r,s,a,b,u)
         (u1,u2) = (fstVal u, sndVal u)

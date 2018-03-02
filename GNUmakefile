@@ -16,7 +16,7 @@ GRAMMAR_HS_FILES += $(GRAMMAR_X_FILES:.x=.hs)
 GRAMMAR_HS_FILES += $(GRAMMAR_Y_FILES:.y=.hs)
 GRAMMAR_OBJECT_FILES = $(GRAMMAR_HS_FILES:.hs=.o)
 PROFILING = # -prof -fprof-auto
-GHCOPTIONS = -O2 -rtsopts -v0 -fno-full-laziness $(PROFILING)
+GHCOPTIONS = -O2 -rtsopts -v0 -fno-full-laziness -fno-cse $(PROFILING)
 
 all: cubical
 
