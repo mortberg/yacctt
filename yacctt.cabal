@@ -1,0 +1,41 @@
+name:           yacctt
+version:        0.1.0.0
+description:    Experimental implementation of Cartesian cubical type theory.
+homepage:       https://github.com/mortberg/yacctt
+author:         Anders Mörtberg and Carlo Angiuli
+maintainer:     andersmortberg@gmail.com
+copyright:      2018 Anders Mörtberg and Carlo Angiuli
+license:        MIT
+build-type:     Custom
+cabal-version:  >= 1.10
+
+executable yacctt
+  main-is: Main.hs
+  other-modules:
+    CTT,
+    Cartesian,
+    Eval,
+    Resolver,
+    TypeChecker,
+    Exp.Abs,
+    Exp.Lex,
+    Exp.ErrM,
+    Exp.Layout,
+    Exp.Print,
+    Exp.Par
+  hs-source-dirs:
+      .
+  ghc-options: -O2 -rtsopts -v0 -fno-full-laziness -fno-cse
+  build-depends:
+      base >=4.7 && <5,
+      containers,
+      pretty,
+      mtl,
+      BNFC,
+      array,
+      haskeline,
+      time,
+      filepath,
+      directory
+  build-tools: alex, happy, bnfc
+  default-language: Haskell2010
