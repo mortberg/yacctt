@@ -447,19 +447,23 @@ checkPLamSystem r u0 va (Sys us) = do
     local (substEnv eqn) $ do
       rhoeqn <- asks env
       checkPLam (va `subst` toSubst eqn) u
-      unlessM (eval rhoeqn u @@ evalII rhoeqn r === eval rhoeqn u0) $
-        throwError $ "\nThe face " ++ show eqn ++ " of the system\n" ++ show (Sys us) ++
-                     "\nat " ++ show r ++ " is " ++ show (eval rhoeqn u @@ r) ++
-                     "\nwhich does not match the cap " ++ show (eval rhoeqn u0)) us
+      let vur = eval rhoeqn u @@ evalII rhoeqn r
+          vu0 = eval rhoeqn u0
+      unlessM (vur === vu0) $
+        throwError $ "\nThe face " ++ show eqn ++ " of the system\n" ++
+                     show (Sys us) ++ "\nat " ++ show r ++ " is " ++ show vur ++
+                     "\nwhich does not match the cap " ++ show vu0) us
   -- Check that the system ps is compatible.
   rho <- asks env
   checkCompSystem (evalSystem rho (Sys us))
 checkPLamSystem r u0 va (Triv u) = do
   rho <- asks env
   checkPLam va u
-  unlessM (eval rho u @@ r === eval rho u0) $
-    throwError ("Trivial system " ++ show (eval rho u @@ r) ++ " at " ++ show r ++
-                "\ndoes not match the cap " ++ show (eval rho u0))
+  let vur = eval rho u @@ evalII rho r
+      vu0 = eval rho u0
+  unlessM (vur === vu0) $
+    throwError ("Trivial system " ++ show vur ++ " at " ++ show r ++
+                "\ndoes not match the cap " ++ show vu0)
 
 checks :: (Tele,Env) -> [Ter] -> Typing ()
 checks ([],_)         []     = return ()
@@ -467,8 +471,7 @@ checks ((x,a):xas,nu) (e:es) = do
   check (eval nu a) e
   v' <- evalTyping e
   checks (xas,upd (x,v') nu) es
-checks _              _      =
-  throwError "checks: incorrect number of arguments"
+checks _ _ = throwError "checks: incorrect number of arguments"
 
 -- infer the type of e
 infer :: Ter -> Typing Val

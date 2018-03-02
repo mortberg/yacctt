@@ -1024,9 +1024,10 @@ instance Normal Ctxt where
 instance Normal II where
   normal _ = id
 
-instance Normal a => Normal (System a) where
+instance (Nominal a, Normal a) => Normal (System a) where
   normal ns (Triv u) = Triv (normal ns u)
-  normal ns (Sys us) = Sys (Map.map (normal ns) us)
+  normal ns (Sys us) =
+    Sys (Map.mapWithKey (\eqn u -> normal ns (u `subst` toSubst eqn)) us)
 
 instance (Normal a,Normal b) => Normal (a,b) where
   normal ns (u,v) = (normal ns u,normal ns v)
