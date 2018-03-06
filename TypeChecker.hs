@@ -1,7 +1,6 @@
-{-# LANGUAGE TupleSections #-}
 module TypeChecker where
 
-import Control.Applicative hiding (empty)
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader

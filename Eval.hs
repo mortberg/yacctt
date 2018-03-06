@@ -320,11 +320,11 @@ com r s a us u0 =
 
 -- apply f to each face (with its binder), eta-expanding where needed
 mapSystem :: (Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
-mapSystem f (Triv (VPLam i u)) = Triv <$> VPLam i <$> f i u
+mapSystem f (Triv (VPLam i u)) = Triv . VPLam i <$> f i u
 mapSystem f (Triv u) = do
   j <- fresh
   uj <- u @@ j
-  Triv <$> VPLam j <$> f j uj
+  Triv . VPLam j <$> f j uj
 mapSystem f (Sys us) = do
   let etaMap (VPLam i u) = VPLam i <$> f i u
       etaMap u = do
@@ -910,7 +910,7 @@ class Convertible a where
 -- relies on Eqn invariant
 isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Eval Bool
 isCompSystem ns (Triv _) = return True
-isCompSystem ns (Sys us) = do
+isCompSystem ns (Sys us) =
   and <$> sequence [ join (conv ns <$> getFace alpha beta <*> getFace beta alpha)
                  | (alpha,beta) <- allCompatible (Map.keys us) ]
   where
@@ -985,7 +985,7 @@ instance Convertible Val where
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
       -- (VUnGlueElem u _ _,VUnGlueElem u' _ _)       -> conv ns u u'
       -- (VHCompU u es,VHCompU u' es')                -> conv ns (u,es) (u',es')
-      _                                               -> return $ False
+      _                                               -> return False
 
 instance Convertible Ctxt where
   conv _ _ _ = return True
@@ -1040,7 +1040,7 @@ instance Convertible II where
   conv _ r s = return $ r == s
 
 instance Convertible (Nameless a) where
-  conv _ _ _ = return $ True
+  conv _ _ _ = return True
 
 -------------------------------------------------------------------------------
 -- | Normalization
