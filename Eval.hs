@@ -549,7 +549,7 @@ vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $ do
   o0 <- otm 0
   o1 <- otm 1
   let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
-  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
+  let (ai,bi,ei) = (a,b,e) `swap` (j,i)
   ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
                  <$> vproj (Name i) u ai bi ei
   p0 <- ptm `subst` (j,0)
