@@ -513,44 +513,73 @@ coe r s a u = return $ VCoe r s a u
 -- TODO
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Eval Val
-vvcoe i j r s a b e u | i /= j = undefined -- trace "vvcoe i != j" $
---   let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
---                       ,(j~>1,coe i r (Name i) b u)]
---       (ar,br,er) = (a,b,e) `subst` (i,r)
---   in vin (Name j)
---          (coe i r s a u)
---          (com i r s b tvec (vproj (Name j) u ar br er))
--- vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $
---   vin s u (coe j 0 s b (app (equivFun e `subst` (j,0)) u))
--- vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $
---   let otm = fstVal (app (equivContr e `subst` (j,s)) (coe j 1 s b u))
---       psys = mkSystem [(s~>0,sndVal otm)
---                       ,(s~>1,VPLam (N "_") (coe j 1 s b u))]
---       ptm = hcomLine 1 0 (b `subst` (j,s)) psys (coe j 1 s b u)
---   in vin s (fstVal otm) ptm
--- vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $
---   let k:l:_ = freshs (Name j,Name i,s,(a,b,e),u)
---       (ak,bk,ek) = (a,b,e) `swap` (j,k)
---       otm eps = vproj (Name k) (coe j eps (Name k) (vtype (Name j) a b e) u) ak bk ek
---       (ai,bi,ei) = (a,b,e) `subst` (j,Name i)
---       psys = mkSystem [(i~>0,otm 0 `swap` (k,j))
---                       ,(i~>1,otm 1 `swap` (k,j))] -- TODO: remove the swaps?
---       ptm = com j (Name i) (Name j) b psys (vproj (Name i) u ai bi ei)
---       p0 = ptm `subst` (j,0)
---       (a0,b0,e0) = (a,b,e) `subst` (j,0)
---       uvec eps t = mkSystem [(l~>0,app (equivFun e0) (coe i eps (Name i) a0 t))
---                             ,(l~>1,p0)]
---       qtm eps t = VPair (coe i eps (Name i) a0 t)
---                         (VPLam l (com i eps (Name i) b0 (uvec eps t) (p0 `subst` (i,eps))))
---       rtm = app (app (sndVal (app (equivContr e0) p0)) (qtm 0 (u `subst` (i,0))))
---                 (qtm 1 (coe j 1 0 (vtype (Name j) a b e) u `subst` (i,1))) @@ i
---       (as,bs,es) = (a,b,e) `subst` (j,s)
---       tvec = mkSystem [(i~>0,otm 0 `subst` (k,s))
---                       ,(i~>1,otm 1 `subst` (k,s))
---                       ,(i~>s,vproj s u as bs es)
---                       ,(s~>0,sndVal rtm)]
---   in vin s (fstVal rtm) (hcom l 1 0 (b `subst` (j,s)) tvec (ptm `subst` (j,s)))
-        
+vvcoe i j r s a b e u | i /= j = trace "vvcoe i != j" $ do
+  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
+  vj1 <- coe r (Name i) (VPLam i b) u
+  let tvec = mkSystem [(j~>0,vj0),(j~>1,vj1)]
+  (ar,br,er) <- (a,b,e) `subst` (i,r)
+  vr <- vproj (Name j) u ar br er
+  vin (Name j) <$> coe r s (VPLam i a) u
+               <*> com r s (VPLam i b) tvec vr
+vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $ do
+  ej0 <- equivFun e `subst` (j,0)
+  ej0u <- app ej0 u
+  vin s u <$> coe 0 s (VPLam j b) ej0u
+vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $ do
+  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
+                              <*> coe 1 s (VPLam j b) u)
+  u' <- VPLam (N "_") <$> coe 1 s (VPLam j b) u
+  i <- fresh
+  otmi <- sndVal otm @@ i
+  let psys = mkSystem [(s~>0,VPLam i otmi),(s~>1,u')]
+  ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
+                         <*> pure psys
+                         <*> coe 1 s (VPLam j b) u
+  return $ vin s (fstVal otm) ptm
+vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $ do
+  -- i = y
+  -- j = x
+  -- k = w
+  -- l = z
+  k <- fresh
+  l <- fresh
+  let (ak,bk,ek) = (a,b,e) `swap` (j,k)
+      u' eps = coe eps (Name k) (VPLam j (vtype (Name j) a b e)) u
+      otm eps = join $ vproj (Name k) <$> u' eps <*> pure ak <*> pure bk <*> pure ek
+  o0 <- otm 0
+  o1 <- otm 1
+  let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
+  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
+  ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
+                 <$> vproj (Name i) u ai bi ei
+  p0 <- ptm `subst` (j,0)
+  (a0,b0,e0) <- (a,b,e) `subst` (j,0)
+  let uvec eps t = do
+        e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
+        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
+      qtm eps t = do
+        t' <- coe eps (Name i) (VPLam i a0) t
+        p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
+        return $ VPair t' (VPLam l p0')
+  e0p02 <- sndVal <$> app (equivContr e0) p0
+  u0 <- u `subst` (i,0)
+  e0p02q <- join $ app e0p02 <$> qtm 0 u0
+  foo <- coe 1 0 (VPLam j (vtype (Name j) a b e)) u
+  foo1 <- foo `subst` (i,1)
+  q1 <- qtm 1 foo1
+  rtm' <- app e0p02q q1
+  rtm <- rtm' @@ i
+  (as,bs,es) <- (a,b,e) `subst` (j,s)
+  (o0s,o1s) <- (o0,o1) `subst` (k,s)
+  vs <- vproj s u as bs es
+  rtml <- sndVal rtm @@ l
+  let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
+                      ,(i~>1,VPLam (N "_") o1s)
+                      ,(i~>s,VPLam (N "_") vs)
+                      ,(s~>0,VPLam l rtml)]
+  ptms <- ptm `subst` (j,s)
+  vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
+
 
 -- Transport and forward
 
@@ -997,7 +1026,7 @@ instance (Convertible a,Convertible b,Convertible c,Convertible d,Convertible e,
 
 instance Convertible a => Convertible [a] where
   conv ns us us' = do
-    bs <- sequence [ conv ns u u' | (u,u') <- zip us us' ] 
+    bs <- sequence [ conv ns u u' | (u,u') <- zip us us' ]
     return (length us == length us' && and bs)
 
 instance (Convertible a,Nominal a) => Convertible (System a) where
@@ -1090,7 +1119,7 @@ instance (Normal a,Normal b,Normal c,Normal d) => Normal (a,b,c,d) where
     u' <- normal ns u
     v' <- normal ns v
     w' <- normal ns w
-    x' <- normal ns x    
+    x' <- normal ns x
     return (u',v',w',x')
 
 instance Normal a => Normal [a] where
