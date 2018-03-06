@@ -14,7 +14,7 @@ import CTT
 import Eval
 
 -- Type checking monad
-type Typing a = ReaderT TEnv (ExceptT String (GenT Integer IO)) a
+type Typing a = ReaderT TEnv (ExceptT String (GenT Int IO)) a
 
 -- Environment for type checker
 data TEnv =

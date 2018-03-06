@@ -96,8 +96,9 @@ instance Nominal Val where
     VPathP a u v                   -> VPathP <$> subst a (i,r) <*> subst u (i,r) <*> subst v (i,r)
     VPLam j v | j == i             -> return u
               | not (j `occurs` r) -> VPLam j <$> subst v (i,r)
-              | otherwise          -> VPLam k <$> subst (v `swap` (j,k)) (i,r)
-         where k = fresh (v,Name i,r)
+              | otherwise          -> do
+                k <- fresh
+                VPLam k <$> subst (v `swap` (j,k)) (i,r)
     VSigma a f                     -> VSigma <$> subst a (i,r) <*> subst f (i,r)
     VPair u v                      -> VPair <$> subst u (i,r) <*> subst v (i,r)
     VFst u                         -> fstVal <$> subst u (i,r)
@@ -184,7 +185,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Hole{}                -> return $ Ter v rho
   PathP a e0 e1         -> VPathP <$> eval rho a <*> eval rho e0 <*> eval rho e1
   PLam i t              -> do
-    let j = fresh rho
+    j <- fresh
     VPLam j <$> eval (sub (i,Name j) rho) t
   AppII e phi           -> join $ (@@) <$> eval rho e <*> pure (evalII rho phi)
   HCom r s a us u0      ->
@@ -240,8 +241,8 @@ app u v = case (u,v) of
   (Ter Split{} _,_) -- | isNeutral v
                     -> return (VSplit u v)
   (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $ do
-    let j = fresh (u,v)
-        bij = b `swap` (i,j)
+    j <- fresh
+    let bij = b `swap` (i,j)
     w <- coe s (Name j) (VPLam i a) v
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
@@ -321,13 +322,13 @@ com r s a us u0 =
 mapSystem :: (Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
 mapSystem f (Triv (VPLam i u)) = Triv <$> VPLam i <$> f i u
 mapSystem f (Triv u) = do
-  let j = fresh u
+  j <- fresh
   uj <- u @@ j
   Triv <$> VPLam j <$> f j uj
 mapSystem f (Sys us) = do
-  let j = fresh (Sys us)
-      etaMap (VPLam i u) = VPLam i <$> f i u
+  let etaMap (VPLam i u) = VPLam i <$> f i u
       etaMap u = do
+        j <- fresh
         uj <- u @@ j
         VPLam j <$> f j uj
   xs <- T.sequence $ Map.map etaMap us
@@ -338,14 +339,14 @@ hcom r s _ _ u0 | r == s = return u0
 hcom r s _ (Triv u) _    = u @@ s
 hcom r s a (Sys us) u0   = case a of
   VPathP a v0 v1 -> trace "hcom path" $ do
-    let j = fresh (r,s,a,Sys us,u0)
+    j <- fresh
     us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
              mapSystem (const (@@ j)) (Sys us)
     aj <- a @@ j
     u0j <- u0 @@ j
     VPLam j <$> hcom r s aj us' u0j
   VSigma a b -> trace "hcom sigma" $ do
-    let j = fresh (r,s,a,b,Sys us,u0)
+    j <- fresh
     us1 <- mapSystem (const (return . fstVal)) (Sys us)
     us2 <- mapSystem (const (return . sndVal)) (Sys us)
     let (u1,u2) = (fstVal u0,sndVal u0)
@@ -484,13 +485,13 @@ coe :: II -> II -> Val -> Val -> Eval Val
 coe r s a u | r == s = return u
 coe r s (VPLam i a) u = case a of
   VPathP a v0 v1 -> trace "coe path" $ do
-    let j = fresh (Name i,r,s,a,(v0,v1),u)
+    j <- fresh
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
     return $ VPLam j out
   VSigma a b -> trace "coe sigma" $ do
-    let j = fresh (Name i,r,s,a,b,u)
-        (u1,u2) = (fstVal u, sndVal u)
+    j <- fresh
+    let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
     bij <- app (b `swap` (i,j)) u1'
     VPair <$> coe r s (VPLam i a) u1 <*> coe r s (VPLam j bij) u2
@@ -901,7 +902,7 @@ instance Convertible Env where
 instance Convertible Val where
   conv ns u v | u == v    = return True
               | otherwise = do
-    let j = fresh (u,v)
+    j <- fresh
     case (u,v) of
       (Ter (Lam x a u) e,Ter (Lam x' a' u') e')       -> do
         v@(VVar n _) <- mkVarNice ns x <$> eval e a
