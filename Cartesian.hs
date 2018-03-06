@@ -4,11 +4,19 @@
 module Cartesian where
 
 import Control.Applicative
+import Control.Monad.Gen
 import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.IORef
 import System.IO.Unsafe
+import qualified Data.Traversable as T
+
+-- The evaluation monad
+type Eval a = GenT Integer IO a
+
+runEval :: Eval a -> IO a
+runEval = runGenT
 
 data Name = N String
           | Gen {-# UNPACK #-} !Int
@@ -141,7 +149,7 @@ class Nominal a where
 --  support :: a -> [Name]
   occurs :: Name -> a -> Bool
 --  occurs x v = x `elem` support v
-  subst   :: a -> (Name,II) -> a
+  subst   :: a -> (Name,II) -> Eval a
   swap    :: a -> (Name,Name) -> a
 
 fresh :: Nominal a => a -> Name
@@ -165,32 +173,41 @@ newtype Nameless a = Nameless { unNameless :: a }
 instance Nominal (Nameless a) where
 --  support _ = []
   occurs _ _ = False
-  subst x _   = x
+  subst x _   = return x
   swap x _  = x
 
 instance Nominal () where
 --  support () = []
   occurs _ _ = False
-  subst () _   = ()
+  subst () _   = return ()
   swap () _  = ()
 
 instance (Nominal a, Nominal b) => Nominal (a, b) where
 --  support (a, b) = support a `union` support b
   occurs x (a,b) = occurs x a || occurs x b
-  subst (a,b) f  = (subst a f,subst b f)
+  subst (a,b) f  = (,) <$> subst a f <*> subst b f
   swap (a,b) n   = (swap a n,swap b n)
 
 instance (Nominal a, Nominal b, Nominal c) => Nominal (a, b, c) where
 --  support (a,b,c) = unions [support a, support b, support c]
   occurs x (a,b,c) = or [occurs x a,occurs x b,occurs x c]
-  subst (a,b,c) f = (subst a f,subst b f,subst c f)
+  subst (a,b,c) f = do
+    af <- subst a f
+    bf <- subst b f
+    cf <- subst c f
+    return (af,bf,cf)
   swap (a,b,c) n  = (swap a n,swap b n,swap c n)
 
 instance (Nominal a, Nominal b, Nominal c, Nominal d) =>
          Nominal (a, b, c, d) where
 --  support (a,b,c,d) = unions [support a, support b, support c, support d]
   occurs x (a,b,c,d) = or [occurs x a,occurs x b,occurs x c,occurs x d]
-  subst (a,b,c,d) f = (subst a f,subst b f,subst c f,subst d f)
+  subst (a,b,c,d) f = do
+    af <- subst a f
+    bf <- subst b f
+    cf <- subst c f
+    df <- subst d f
+    return (af,bf,cf,df)
   swap (a,b,c,d) n  = (swap a n,swap b n,swap c n,swap d n)
 
 instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e) =>
@@ -199,7 +216,13 @@ instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e) =>
   --   unions [support a, support b, support c, support d, support e]
   occurs x (a,b,c,d,e) =
     or [occurs x a,occurs x b,occurs x c,occurs x d,occurs x e]
-  subst (a,b,c,d,e) f = (subst a f,subst b f,subst c f,subst d f, subst e f)
+  subst (a,b,c,d,e) f = do
+    af <- subst a f
+    bf <- subst b f
+    cf <- subst c f
+    df <- subst d f
+    ef <- subst e f
+    return (af,bf,cf,df,ef)
   swap (a,b,c,d,e) n =
     (swap a n,swap b n,swap c n,swap d n,swap e n)
 
@@ -209,20 +232,27 @@ instance (Nominal a, Nominal b, Nominal c, Nominal d, Nominal e, Nominal h) =>
   --   unions [support a, support b, support c, support d, support e, support h]
   occurs x (a,b,c,d,e,h) =
     or [occurs x a,occurs x b,occurs x c,occurs x d,occurs x e,occurs x h]
-  subst (a,b,c,d,e,h) f = (subst a f,subst b f,subst c f,subst d f, subst e f, subst h f)
+  subst (a,b,c,d,e,h) f = do
+    af <- subst a f
+    bf <- subst b f
+    cf <- subst c f
+    df <- subst d f
+    ef <- subst e f
+    hf <- subst h f
+    return (af,bf,cf,df,ef,hf)
   swap (a,b,c,d,e,h) n  =
     (swap a n,swap b n,swap c n,swap d n,swap e n,swap h n)
 
 instance Nominal a => Nominal [a]  where
 --  support xs  = unions (map support xs)
   occurs x xs = any (occurs x) xs
-  subst xs f  = [ subst x f | x <- xs ]
+  subst xs f  = T.sequence [ subst x f | x <- xs ]
   swap xs n   = [ swap x n | x <- xs ]
 
 instance Nominal a => Nominal (Maybe a)  where
 --  support    = maybe [] support
   occurs x   = maybe False (occurs x)
-  subst v f  = fmap (\y -> subst y f) v
+  subst v f  = T.sequence (fmap (\y -> subst y f) v)
   swap a n   = fmap (`swap` n) a
 
 instance Nominal II where
@@ -232,9 +262,9 @@ instance Nominal II where
   occurs x (Dir _)  = False
   occurs x (Name i) = x == i
 
-  subst (Dir b)  (i,r) = Dir b
-  subst (Name j) (i,r) | i == j    = r
-                       | otherwise = Name j
+  subst (Dir b)  (i,r) = return $ Dir b
+  subst (Name j) (i,r) | i == j    = return r
+                       | otherwise = return $ Name j
 
   swap (Dir b)  (i,j) = Dir b
   swap (Name k) (i,j) | k == i    = Name j
@@ -243,7 +273,7 @@ instance Nominal II where
 
 instance Nominal Eqn where
   occurs x (Eqn r s) = occurs x r || occurs x s
-  subst (Eqn r s) f = eqn (subst r f, subst s f)
+  subst (Eqn r s) f = curry eqn <$> subst r f <*> subst s f
   swap (Eqn r s) f = eqn (swap r f, swap s f)
 
 supportII :: II -> [Name]
@@ -292,8 +322,9 @@ instance Nominal a => Nominal (System a) where
     where fn eqn a accum = accum || occurs x eqn || occurs x a
   occurs x (Triv a) = occurs x a
 
-  subst (Sys xs) f = Map.foldrWithKey fn eps xs
-    where fn eqn a = insertSystem (subst eqn f,subst a f)
+  subst (Sys xs) f =
+    mkSystem <$> mapM (\(eqn,a) -> (,) <$> subst eqn f <*> subst a f) (Map.assocs xs)
+  subst (Triv x) f = Triv <$> subst x f
 
   swap (Sys xs) ij = Map.foldrWithKey fn eps xs
     where fn eqn a = insertSystem (swap eqn ij,swap a ij)
@@ -313,10 +344,10 @@ shape = border ()
 
 -- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us
-proj :: (Nominal a, Show a) => System a -> (Name,II) -> a
-proj us ir = case us `subst` ir of
-  Triv a -> a
-  _ -> error "proj"
+-- proj :: (Nominal a, Show a) => System a -> (Name,II) -> a
+-- proj us ir = case us `subst` ir of
+--   Triv a -> a
+--   _ -> error "proj"
 
 eqnSupport :: System a -> [Name]
 eqnSupport (Triv _) = []
@@ -324,4 +355,3 @@ eqnSupport (Sys xs) = concatMap support (Map.keys xs)
   where support (Eqn (Name i) (Dir _)) = [i]
         support (Eqn (Name i) (Name j)) = [i,j]
         support eqn = error $ "eqnSupport: encountered " ++ show eqn ++ " in system"
-

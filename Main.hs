@@ -20,6 +20,7 @@ import Exp.Layout
 import Exp.ErrM
 
 import CTT
+import Cartesian
 import Resolver
 import qualified TypeChecker as TC
 import qualified Eval as E
@@ -136,7 +137,7 @@ loop flags f names tenv = do
       let (msg,str,mod) = case str' of
             (':':'n':' ':str) ->
               ("NORMEVAL: ",str,E.normal [])
-            str -> ("EVAL: ",str,id)
+            str -> ("EVAL: ",str,return)
       in case pExp (lexer str) of
       Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f names tenv
       Ok  exp ->
@@ -150,7 +151,7 @@ loop flags f names tenv = do
                              loop flags f names tenv
               Right _  -> do
                 start <- liftIO getCurrentTime
-                let e = mod $ E.eval (TC.env tenv) body
+                e <- liftIO $ runEval $ join (mod <$> E.eval (TC.env tenv) body)
                 -- Let's not crash if the evaluation raises an error:
                 liftIO $ catch (putStrLn (msg ++ shrink (show e)))
                                (\e -> putStrLn ("Exception: " ++

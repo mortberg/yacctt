@@ -41,6 +41,7 @@ Main.o : Main.hs
 Main.o : Eval.hi
 Main.o : TypeChecker.hi
 Main.o : Resolver.hi
+Main.o : Cartesian.hi
 Main.o : CTT.hi
 Main.o : Exp/ErrM.hi
 Main.o : Exp/Layout.hi

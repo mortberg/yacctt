@@ -1,11 +1,13 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, TupleSections #-}
 module Eval where
 
 import Debug.Trace
-
+import Control.Monad
+import Control.Monad.Gen
 import Data.List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Traversable as T
 
 import Cartesian
 import CTT
@@ -13,8 +15,8 @@ import CTT
 -----------------------------------------------------------------------
 -- Lookup functions
 
-look :: String -> Env -> Val
-look x (Env (Upd y rho,v:vs,fs,os)) | x == y = v
+look :: String -> Env -> Eval Val
+look x (Env (Upd y rho,v:vs,fs,os)) | x == y = return v
                                     | otherwise = look x (Env (rho,vs,fs,os))
 look x r@(Env (Def _ decls rho,vs,fs,Nameless os)) = case lookup x decls of
   Just (_,t) -> eval r t
@@ -22,10 +24,10 @@ look x r@(Env (Def _ decls rho,vs,fs,Nameless os)) = case lookup x decls of
 look x (Env (Sub _ rho,vs,_:fs,os)) = look x (Env (rho,vs,fs,os))
 look x (Env (Empty,_,_,_)) = error $ "look: not found " ++ show x
 
-lookType :: String -> Env -> Val
+lookType :: String -> Env -> Eval Val
 lookType x (Env (Upd y rho,v:vs,fs,os))
   | x /= y        = lookType x (Env (rho,vs,fs,os))
-  | VVar _ a <- v = a
+  | VVar _ a <- v = return a
   | otherwise     = error ""
 lookType x r@(Env (Def _ decls rho,vs,fs,os)) = case lookup x decls of
   Just (a,_) -> eval r a
@@ -36,8 +38,8 @@ lookType x (Env (Empty,_,_,_))          = error $ "lookType: not found " ++ show
 lookName :: Name -> Env -> II
 lookName i (Env (Upd _ rho,v:vs,fs,os)) = lookName i (Env (rho,vs,fs,os))
 lookName i (Env (Def _ _ rho,vs,fs,os)) = lookName i (Env (rho,vs,fs,os))
-lookName i (Env (Sub j rho,vs,phi:fs,os)) | i == j    = phi
-                                          | otherwise = lookName i (Env (rho,vs,fs,os))
+lookName i (Env (Sub j rho,vs,r:fs,os)) | i == j    = r
+                                        | otherwise = lookName i (Env (rho,vs,fs,os))
 lookName i _ = error $ "lookName: not found " ++ show i
 
 
@@ -46,12 +48,15 @@ lookName i _ = error $ "lookName: not found " ++ show i
 
 instance Nominal Ctxt where
   occurs _ _ = False
-  subst e _   = e
-  swap e _  = e
+  subst e _  = return e
+  swap e _   = e
 
 instance Nominal Env where
   occurs x (Env (rho,vs,fs,os)) = occurs x (rho,vs,fs,os)
-  subst (Env (rho,vs,fs,os)) iphi = Env (rho,subst vs iphi,subst fs iphi,os)
+  subst (Env (rho,vs,fs,os)) iphi = do
+    vs' <- subst vs iphi
+    fs' <- subst fs iphi
+    return $ Env (rho,vs',fs',os)
   swap (Env (rho,vs,fs,os)) ij = Env $ swap (rho,vs,fs,os) ij
 
 instance Nominal Val where
@@ -85,34 +90,34 @@ instance Nominal Val where
     -- VUnGlueElemU a b es     -> occurs x (a,b,es)
 
   subst u (i,r) = case u of
-    VU                             -> VU
-    Ter t e                        -> Ter t (subst e (i,r))
-    VPi a f                        -> VPi (subst a (i,r)) (subst f (i,r))
-    VPathP a u v                   -> VPathP (subst a (i,r)) (subst u (i,r)) (subst v (i,r))
-    VPLam j v | j == i             -> u
-              | not (j `occurs` r) -> VPLam j (subst v (i,r))
-              | otherwise          -> VPLam k (subst (v `swap` (j,k)) (i,r))
+    VU                             -> return VU
+    Ter t e                        -> Ter t <$> subst e (i,r)
+    VPi a f                        -> VPi <$> subst a (i,r) <*> subst f (i,r)
+    VPathP a u v                   -> VPathP <$> subst a (i,r) <*> subst u (i,r) <*> subst v (i,r)
+    VPLam j v | j == i             -> return u
+              | not (j `occurs` r) -> VPLam j <$> subst v (i,r)
+              | otherwise          -> VPLam k <$> subst (v `swap` (j,k)) (i,r)
          where k = fresh (v,Name i,r)
-    VSigma a f                     -> VSigma (subst a (i,r)) (subst f (i,r))
-    VPair u v                      -> VPair (subst u (i,r)) (subst v (i,r))
-    VFst u                         -> fstVal (subst u (i,r))
-    VSnd u                         -> sndVal (subst u (i,r))
-    VCon c vs                      -> VCon c (subst vs (i,r))
-    VPCon c a vs phis              -> pcon c (subst a (i,r)) (subst vs (i,r)) (subst phis (i,r))
-    VHCom s s' a us u0             -> hcom (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst us (i,r)) (subst u0 (i,r))
-    VCoe s s' a u                  -> coe (subst s (i,r)) (subst s' (i,r)) (subst a (i,r)) (subst u (i,r))
-    VVar x v                       -> VVar x (subst v (i,r))
-    VOpaque x v                    -> VOpaque x (subst v (i,r))
-    VAppII u psi                   -> subst u (i,r) @@ subst psi (i,r)
-    VApp u v                       -> app (subst u (i,r)) (subst v (i,r))
-    VLam x t u                     -> VLam x (subst t (i,r)) (subst u (i,r))
-    VSplit u v                     -> app (subst u (i,r)) (subst v (i,r))
+    VSigma a f                     -> VSigma <$> subst a (i,r) <*> subst f (i,r)
+    VPair u v                      -> VPair <$> subst u (i,r) <*> subst v (i,r)
+    VFst u                         -> fstVal <$> subst u (i,r)
+    VSnd u                         -> sndVal <$> subst u (i,r)
+    VCon c vs                      -> VCon c <$> subst vs (i,r)
+    VPCon c a vs phis              -> join $ pcon c <$> subst a (i,r) <*> subst vs (i,r) <*> subst phis (i,r)
+    VHCom s s' a us u0             -> join $ hcom <$> subst s (i,r) <*> subst s' (i,r) <*> subst a (i,r) <*> subst us (i,r) <*> subst u0 (i,r)
+    VCoe s s' a u                  -> join $ coe <$> subst s (i,r) <*> subst s' (i,r) <*> subst a (i,r) <*> subst u (i,r)
+    VVar x v                       -> VVar x <$> subst v (i,r)
+    VOpaque x v                    -> VOpaque x <$> subst v (i,r)
+    VAppII u s                     -> join $ (@@) <$> subst u (i,r) <*> subst s (i,r)
+    VApp u v                       -> join $ app <$> subst u (i,r) <*> subst v (i,r)
+    VLam x t u                     -> VLam x <$> subst t (i,r) <*> subst u (i,r)
+    VSplit u v                     -> join $ app <$> subst u (i,r) <*> subst v (i,r)
     VV j a b e                     ->
-      vtype (subst (Name j) (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
+      vtype <$> subst (Name j) (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
     VVin j m n                     ->
-      vin (subst (Name j) (i,r)) (subst m (i,r)) (subst n (i,r))
+      vin <$> subst (Name j) (i,r) <*> subst m (i,r) <*> subst n (i,r)
     VVproj j o a b e               ->
-      vproj (subst (Name j) (i,r)) (subst o (i,r)) (subst a (i,r)) (subst b (i,r)) (subst e (i,r))
+      join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -155,46 +160,47 @@ instance Nominal Val where
 -----------------------------------------------------------------------
 -- The evaluator
 
-eval :: Env -> Ter -> Val
+eval :: Env -> Ter -> Eval Val
 eval rho@(Env (_,_,_,Nameless os)) v = case v of
-  U                     -> VU
-  App r s               -> app (eval rho r) (eval rho s)
+  U                     -> return VU
+  App r s               -> join $ app <$> eval rho r <*> eval rho s
   Var i
-    | i `Set.member` os -> VOpaque i (lookType i rho)
+    | i `Set.member` os -> VOpaque i <$> lookType i rho
     | otherwise         -> look i rho
-  Pi t@(Lam _ a _)      -> VPi (eval rho a) (eval rho t)
-  Sigma t@(Lam _ a _)   -> VSigma (eval rho a) (eval rho t)
-  Pair a b              -> VPair (eval rho a) (eval rho b)
-  Fst a                 -> fstVal (eval rho a)
-  Snd a                 -> sndVal (eval rho a)
+  Pi t@(Lam _ a _)      -> VPi <$> eval rho a <*> eval rho t
+  Sigma t@(Lam _ a _)   -> VSigma <$> eval rho a <*> eval rho t
+  Pair a b              -> VPair <$> eval rho a <*> eval rho b
+  Fst a                 -> fstVal <$> eval rho a
+  Snd a                 -> sndVal <$> eval rho a
   Where t decls         -> eval (defWhere decls rho) t
-  Con name ts           -> VCon name (map (eval rho) ts)
+  Con name ts           -> VCon <$> pure name <*> mapM (eval rho) ts
   PCon name a ts phis   ->
-    pcon name (eval rho a) (map (eval rho) ts) (map (evalII rho) phis)
-  Lam{}                 -> Ter v rho
-  Split{}               -> Ter v rho
-  Sum{}                 -> Ter v rho
-  HSum{}                -> Ter v rho
-  Undef{}               -> Ter v rho
-  Hole{}                -> Ter v rho
-  PathP a e0 e1         -> VPathP (eval rho a) (eval rho e0) (eval rho e1)
-  PLam i t              -> let j = fresh rho
-                           in VPLam j (eval (sub (i,Name j) rho) t)
-  AppII e phi           -> eval rho e @@ evalII rho phi
+    join $ pcon name <$> eval rho a <*> mapM (eval rho) ts <*> pure (map (evalII rho) phis)
+  Lam{}                 -> return $ Ter v rho
+  Split{}               -> return $ Ter v rho
+  Sum{}                 -> return $ Ter v rho
+  HSum{}                -> return $ Ter v rho
+  Undef{}               -> return $ Ter v rho
+  Hole{}                -> return $ Ter v rho
+  PathP a e0 e1         -> VPathP <$> eval rho a <*> eval rho e0 <*> eval rho e1
+  PLam i t              -> do
+    let j = fresh rho
+    VPLam j <$> eval (sub (i,Name j) rho) t
+  AppII e phi           -> join $ (@@) <$> eval rho e <*> pure (evalII rho phi)
   HCom r s a us u0      ->
-    hcom (evalII rho r) (evalII rho s) (eval rho a) (evalSystem rho us) (eval rho u0)
-  Coe r s a t           -> coe (evalII rho r) (evalII rho s) (eval rho a) (eval rho t)
+    join $ hcom (evalII rho r) (evalII rho s) <$> eval rho a <*> evalSystem rho us <*> eval rho u0
+  Coe r s a t           -> join $ coe (evalII rho r) (evalII rho s) <$> eval rho a <*> eval rho t
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
-  V r a b e             -> vtype (evalII rho r) (eval rho a) (eval rho b) (eval rho e)
-  Vin r m n             -> vin (evalII rho r) (eval rho m) (eval rho n)
-  Vproj r o a b e       -> vproj (evalII rho r) (eval rho o) (eval rho a) (eval rho b) (eval rho e)
+  V r a b e             -> vtype <$> pure (evalII rho r) <*> eval rho a <*> eval rho b <*> eval rho e
+  Vin r m n             -> vin <$> pure (evalII rho r) <*> eval rho m <*> eval rho n
+  Vproj r o a b e       -> join $ vproj (evalII rho r) <$> eval rho o <*> eval rho a <*> eval rho b <*> eval rho e
   -- Glue a ts          -> glue (eval rho a) (evalSystem rho ts)
   -- GlueElem a ts      -> glueElem (eval rho a) (evalSystem rho ts)
   -- UnGlueElem v a ts  -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
   _                     -> error $ "Cannot evaluate " ++ show v
 
-evals :: Env -> [(Ident,Ter)] -> [(Ident,Val)]
-evals env bts = [ (b,eval env t) | (b,t) <- bts ]
+evals :: Env -> [(Ident,Ter)] -> Eval [(Ident,Val)]
+evals rho bts = mapM (\(b,t) -> (b,) <$> eval rho t) bts
 
 evalII :: Env -> II -> II
 evalII rho phi = case phi of
@@ -204,14 +210,17 @@ evalII rho phi = case phi of
 evalEqn :: Env -> Eqn -> Eqn
 evalEqn rho (Eqn r s) = eqn (evalII rho r,evalII rho s)
 
-evalSystem :: Env -> System Ter -> System Val
-evalSystem rho (Triv u) = Triv (eval rho u)
+evalSystem :: Env -> System Ter -> Eval (System Val)
+evalSystem rho (Triv u) = Triv <$> eval rho u
 evalSystem rho (Sys us) =
   case Map.foldrWithKey (\eqn u -> insertSystem (evalEqn rho eqn,u)) eps us of
-    Triv u -> Triv (eval rho u)
-    Sys sys' -> Sys $ Map.mapWithKey (\eqn u -> eval (rho `subst` toSubst eqn) u) sys'
+    Triv u -> Triv <$> eval rho u
+    Sys sys' -> do
+      xs <- sequence $ Map.mapWithKey (\eqn u ->
+                          join $ eval <$> rho `subst` toSubst eqn <*> pure u) sys'
+      return $ Sys xs
 
-app :: Val -> Val -> Val
+app :: Val -> Val -> Eval Val
 app u v = case (u,v) of
   (Ter (Lam x _ t) e,_) -> eval (upd (x,v) e) t
   (Ter (Split _ _ _ nvs) e,VCon c vs) -> case lookupBranch c nvs of
@@ -229,13 +238,14 @@ app u v = case (u,v) of
     --            in comp j (app f (hFill j a w wsj)) w' ws'
     -- _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
-                    -> VSplit u v
-  (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $
+                    -> return (VSplit u v)
+  (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $ do
     let j = fresh (u,v)
         bij = b `swap` (i,j)
-        w = coe s (Name j) (VPLam i a) v
-        w0 = coe s r (VPLam i a) v
-    in coe r s (VPLam j (app bij w)) (app u0 w0)
+    w <- coe s (Name j) (VPLam i a) v
+    w0 <- coe s r (VPLam i a) v
+    bijw <- VPLam j <$> app bij w
+    join $ coe r s bijw <$> app u0 w0
   (VHCom r s (VPi a b) (Sys us) u0, v) -> undefined -- trace "hcom pi" $
     -- let i = fresh (u,v)
     -- in hcom i r s
@@ -244,7 +254,7 @@ app u v = case (u,v) of
     --         (app u0 v)
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv" -- TODO: rewrite it instead of implementing
 --  _ | isNeutral u       -> VApp u v
-  _                     -> VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
+  _                     -> return $ VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
 
 fstVal, sndVal :: Val -> Val
 fstVal (VPair a b)     = a
@@ -255,93 +265,102 @@ sndVal (VPair a b)     = b
 sndVal u               = VSnd u -- error $ "sndVal: " ++ show u ++ " is not neutral."
 
 -- infer the type of a neutral value
-inferType :: Val -> Val
+inferType :: Val -> Eval Val
 inferType v = case v of
-  VVar _ t -> t
-  VOpaque _ t -> t
+  VVar _ t -> return t
+  VOpaque _ t -> return t
   Ter (Undef _ t) rho -> eval rho t
-  VFst t -> case inferType t of
-    VSigma a _ -> a
+  VFst t -> inferType t >>= \t' -> case t' of -- LambdaCase?
+    VSigma a _ -> return a
     ty         -> error $ "inferType: expected Sigma type for " ++ show v
                   ++ ", got " ++ show ty
-  VSnd t -> case inferType t of
+  VSnd t -> inferType t >>= \t' -> case t' of
     VSigma _ f -> app f (VFst t)
     ty         -> error $ "inferType: expected Sigma type for " ++ show v
                   ++ ", got " ++ show ty
-  VSplit s@(Ter (Split _ _ t _) rho) v1 -> case eval rho t of
+  VSplit s@(Ter (Split _ _ t _) rho) v1 -> eval rho t >>= \t' -> case t' of
     VPi _ f -> app f v1
     ty      -> error $ "inferType: Pi type expected for split annotation in "
                ++ show v ++ ", got " ++ show ty
-  VApp t0 t1 -> case inferType t0 of
+  VApp t0 t1 -> inferType t0 >>= \t' -> case t' of
     VPi _ f -> app f t1
     ty      -> error $ "inferType: expected Pi type for " ++ show v
                ++ ", got " ++ show ty
-  VAppII t phi -> case inferType t of
+  VAppII t phi -> inferType t >>= \t' -> case t' of
     VPathP a _ _ -> a @@ phi
     ty         -> error $ "inferType: expected PathP type for " ++ show v
                   ++ ", got " ++ show ty
-  VHCom r s a _ _ -> a
+  VHCom r s a _ _ -> return a
   VCoe r s a _ -> a @@ s
-  VVproj _ _ _ b _ -> b
+  VVproj _ _ _ b _ -> return b
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
 
-(@@) :: ToII a => Val -> a -> Val
+(@@) :: ToII a => Val -> a -> Eval Val
 (VPLam i u) @@ phi         = u `subst` (i,toII phi)
-v@(Ter Hole{} _) @@ phi    = VAppII v (toII phi)
-v @@ phi -- | isNeutral v
-         = case (inferType v,toII phi) of
-  (VPathP _ a0 _,Dir 0) -> a0
-  (VPathP _ _ a1,Dir 1) -> a1
-  _                    -> VAppII v (toII phi)
+v@(Ter Hole{} _) @@ phi    = return $ VAppII v (toII phi)
+v @@ phi = do
+  t <- inferType v
+  case (t,toII phi) of
+    (VPathP _ a0 _,Dir 0) -> return a0
+    (VPathP _ _ a1,Dir 1) -> return a1
+    _                    -> return $ VAppII v (toII phi)
 -- v @@ phi                   = error $ "(@@): " ++ show v ++ " should be neutral."
 
 -------------------------------------------------------------------------------
 -- com and hcom
 
-com :: II -> II -> Val -> System Val -> Val -> Val
-com r s a _ u0 | r == s = u0
+com :: II -> II -> Val -> System Val -> Val -> Eval Val
+com r s a _ u0 | r == s = return u0
 com _ s _ (Triv u) _  = u @@ s
 com r s a us u0 =
-  hcom r s (a @@ s) (mapSystem (\j u -> coe (Name j) s a u) us) (coe r s a u0)
+  join $ hcom r s <$> a @@ s <*> mapSystem (\j u -> coe (Name j) s a u) us <*> coe r s a u0
 
 -- apply f to each face (with its binder), eta-expanding where needed
-mapSystem :: (Name -> Val -> Val) -> System Val -> System Val
-mapSystem f (Triv (VPLam i u)) = Triv (VPLam i (f i u))
-mapSystem f (Triv u) =
+mapSystem :: (Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
+mapSystem f (Triv (VPLam i u)) = Triv <$> VPLam i <$> f i u
+mapSystem f (Triv u) = do
   let j = fresh u
-  in Triv (VPLam j (f j (u @@ j)))
-mapSystem f (Sys us) =
+  uj <- u @@ j
+  Triv <$> VPLam j <$> f j uj
+mapSystem f (Sys us) = do
   let j = fresh (Sys us)
-      etaMap (VPLam i u) = VPLam i (f i u)
-      etaMap u = VPLam j (f j (u @@ j))
-  in Sys $ Map.map etaMap us
+      etaMap (VPLam i u) = VPLam i <$> f i u
+      etaMap u = do
+        uj <- u @@ j
+        VPLam j <$> f j uj
+  xs <- T.sequence $ Map.map etaMap us
+  return (Sys xs)
 
-hcom :: II -> II -> Val -> System Val -> Val -> Val
-hcom r s _ _ u0 | r == s = u0
+hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
+hcom r s _ _ u0 | r == s = return u0
 hcom r s _ (Triv u) _    = u @@ s
 hcom r s a (Sys us) u0   = case a of
-  VPathP a v0 v1 -> trace "hcom path" $
+  VPathP a v0 v1 -> trace "hcom path" $ do
     let j = fresh (r,s,a,Sys us,u0)
-    in VPLam j $ hcom r s (a @@ j)
-                   (insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)]
-                     (mapSystem (const (@@ j)) (Sys us)))
-                   (u0 @@ j)
-  VSigma a b -> trace "hcom sigma" $
+    us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
+             mapSystem (const (@@ j)) (Sys us)
+    aj <- a @@ j
+    u0j <- u0 @@ j
+    VPLam j <$> hcom r s aj us' u0j
+  VSigma a b -> trace "hcom sigma" $ do
     let j = fresh (r,s,a,b,Sys us,u0)
-        (us1,us2) = (mapSystem (const fstVal) (Sys us),mapSystem (const sndVal) (Sys us))
-        (u1,u2) = (fstVal u0,sndVal u0)
-        u1fill = hcom r (Name j) a us1 u1
-        u1hcom = hcom r s a us1 u1
-    in VPair u1hcom (com r s (VPLam j (app b u1fill)) us2 u2)
+    us1 <- mapSystem (const (return . fstVal)) (Sys us)
+    us2 <- mapSystem (const (return . sndVal)) (Sys us)
+    let (u1,u2) = (fstVal u0,sndVal u0)
+    u1fill <- hcom r (Name j) a us1 u1
+    u1hcom <- hcom r s a us1 u1
+    bj <- VPLam j <$> app b u1fill
+    VPair u1hcom <$> com r s bj us2 u2
   -- VU -> error "hcom U"
   -- Ter (Sum _ n nass) env
   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys us) u0
-  VPi{} -> VHCom r s a (Sys us) u0
-  _ -> VHCom r s a (Sys us) u0
+  VPi{} -> return $ VHCom r s a (Sys us) u0
+  _ -> return $ VHCom r s a (Sys us) u0
+
 
 -------------------------------------------------------------------------------
 -- Composition and filling
@@ -461,35 +480,38 @@ hcom r s a (Sys us) u0   = case a of
 -----------------------------------------------------------
 -- Coe
 
-coe :: II -> II -> Val -> Val -> Val
-coe r s a u | r == s = u
+coe :: II -> II -> Val -> Val -> Eval Val
+coe r s a u | r == s = return u
 coe r s (VPLam i a) u = case a of
-  VPathP a v0 v1 -> trace "coe path" $
+  VPathP a v0 v1 -> trace "coe path" $ do
     let j = fresh (Name i,r,s,a,(v0,v1),u)
-    in VPLam j $ com r s (VPLam i (a @@ j))
-                     (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) (u @@ j)
-  VSigma a b -> trace "coe sigma" $
+    aij <- VPLam i <$> (a @@ j)
+    out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
+    return $ VPLam j out
+  VSigma a b -> trace "coe sigma" $ do
     let j = fresh (Name i,r,s,a,b,u)
         (u1,u2) = (fstVal u, sndVal u)
-        u1'     = coe r (Name j) (VPLam i a) u1
-    in VPair (coe r s (VPLam i a) u1) (coe r s (VPLam j (app (b `swap` (i,j)) u1')) u2)
-  VPi{} -> VCoe r s (VPLam i a) u
-  VU -> u
+    u1' <- coe r (Name j) (VPLam i a) u1
+    bij <- app (b `swap` (i,j)) u1'
+    VPair <$> coe r s (VPLam i a) u1 <*> coe r s (VPLam j bij) u2
+  VPi{} -> return $ VCoe r s (VPLam i a) u
+  VU -> return u
   VV j a b e -> vvcoe i j r s a b e u
   Ter (Sum _ n nass) env
-    | n `elem` ["nat","Z","bool"] -> u -- hardcode hack
+    | n `elem` ["nat","Z","bool"] -> return u -- hardcode hack
     | otherwise -> error "coe sum"
   Ter (HSum _ n nass) env
-    | n `elem` ["S1","S2","S3"] -> u   -- hardcode hack
+    | n `elem` ["S1","S2","S3"] -> return u   -- hardcode hack
     | otherwise -> error "coe hsum"
   -- VTypes
   _ -> -- error "missing case in coe" --
-       VCoe r s (VPLam i a) u
-coe r s a u = VCoe r s a u
+       return $ VCoe r s (VPLam i a) u
+coe r s a u = return $ VCoe r s a u
+
 
 -- TODO
 -- In Part 3: i corresponds to y, and, j to x
-vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Val
+vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Eval Val
 vvcoe i j r s a b e u | i /= j = undefined -- trace "vvcoe i != j" $
 --   let tvec = mkSystem [(j~>0,app (equivFun e) (coe i r (Name i) a u))
 --                       ,(j~>1,coe i r (Name i) b u)]
@@ -632,13 +654,13 @@ vvcoe i j r s a b e u | i /= j = undefined -- trace "vvcoe i != j" $
 -------------------------------------------------------------------------------
 -- | HITs
 
-pcon :: LIdent -> Val -> [Val] -> [II] -> Val
+pcon :: LIdent -> Val -> [Val] -> [II] -> Eval Val
 pcon c a@(Ter (HSum _ _ lbls) rho) us phis = case lookupPLabel c lbls of
-  Just (tele,is,ts) -> case evalSystem (subs (zip is phis) (updsTele tele us rho)) ts of
-    Triv x -> x
-    _ -> VPCon c a us phis
+  Just (tele,is,ts) -> evalSystem (subs (zip is phis) (updsTele tele us rho)) ts >>= \t' -> case t' of
+    Triv x -> return x
+    _ -> return $ VPCon c a us phis
   Nothing           -> error "pcon"
-pcon c a us phi     = VPCon c a us phi
+pcon c a us phi     = return $ VPCon c a us phi
 
 
 -------------------------------------------------------------------------------
@@ -673,12 +695,12 @@ vin (Dir One) _ n = n
 -- vin r m (VVproj s o _ _) | r == s = o -- TODO?
 vin (Name i) m n = VVin i m n
 
-vproj :: II -> Val -> Val -> Val -> Val -> Val
-vproj (Dir Zero) o _ _ e = app (equivFun e) o -- TODO: rewrite equivFun
-vproj (Dir One) o _ _ _ = o
-vproj (Name i) x@(VVin j m n) _ _ _ | i == j = n
+vproj :: II -> Val -> Val -> Val -> Val -> Eval Val
+vproj (Dir Zero) o _ _ e = app (equivFun e) o
+vproj (Dir One) o _ _ _ = return o
+vproj (Name i) x@(VVin j m n) _ _ _ | i == j = return n
                                     | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
-vproj (Name i) o a b e = VVproj i o a b e
+vproj (Name i) o a b e = return $ VVproj i o a b e
 
 
 -------------------------------------------------------------------------------
@@ -853,15 +875,19 @@ vproj (Name i) o a b e = VVproj i o a b e
 -- | Conversion
 
 class Convertible a where
-  conv :: [String] -> a -> a -> Bool
+  conv :: [String] -> a -> a -> Eval Bool
 
 -- relies on Eqn invariant
-isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Bool
-isCompSystem ns (Triv _) = True
-isCompSystem ns (Sys us) = and [ conv ns (getFace alpha beta) (getFace beta alpha)
-                               | (alpha,beta) <- allCompatible (Map.keys us) ]
+isCompSystem :: (Nominal a, Convertible a) => [String] -> System a -> Eval Bool
+isCompSystem ns (Triv _) = return True
+isCompSystem ns (Sys us) = do
+  and <$> sequence [ join (conv ns <$> getFace alpha beta <*> getFace beta alpha)
+                 | (alpha,beta) <- allCompatible (Map.keys us) ]
   where
-  getFace a b = us Map.! a `subst` toSubst a `subst` toSubst (b `subst` toSubst a)
+  getFace a b = do
+    usa <- us Map.! a `subst` toSubst a
+    ba <- b `subst` toSubst a
+    usa `subst` toSubst ba
   -- getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
   --   | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
   -- getFace a@(Eqn (Name k) (Dir d)) (Eqn (Name i) (Name j))
@@ -873,171 +899,198 @@ instance Convertible Env where
       conv ns (rho1,vs1,fs1,os1) (rho2,vs2,fs2,os2)
 
 instance Convertible Val where
-  conv ns u v | u == v    = True
-              | otherwise =
+  conv ns u v | u == v    = return True
+              | otherwise = do
     let j = fresh (u,v)
-    in case (u,v) of
-      (Ter (Lam x a u) e,Ter (Lam x' a' u') e')       ->
-        let v@(VVar n _) = mkVarNice ns x (eval e a)
-        in conv (n:ns) (eval (upd (x,v) e) u) (eval (upd (x',v) e') u')
-      (Ter (Lam x a u) e,u')                          ->
-        let v@(VVar n _) = mkVarNice ns x (eval e a)
-        in conv (n:ns) (eval (upd (x,v) e) u) (app u' v)
-      (u',Ter (Lam x a u) e)                          ->
-        let v@(VVar n _) = mkVarNice ns x (eval e a)
-        in conv (n:ns) (app u' v) (eval (upd (x,v) e) u)
-      (Ter (Split _ p _ _) e,Ter (Split _ p' _ _) e') -> (p == p') && conv ns e e'
-      (Ter (Sum p _ _) e,Ter (Sum p' _ _) e')         -> (p == p') && conv ns e e'
-      (Ter (HSum p _ _) e,Ter (HSum p' _ _) e')       -> (p == p') && conv ns e e'
-      (Ter (Undef p _) e,Ter (Undef p' _) e')         -> p == p' && conv ns e e'
-      (Ter (Hole p) e,Ter (Hole p') e')               -> p == p' && conv ns e e'
-      -- (Ter Hole{} e,_)                             -> True
-      -- (_,Ter Hole{} e')                            -> True
-      (VPi u v,VPi u' v')                             ->
+    case (u,v) of
+      (Ter (Lam x a u) e,Ter (Lam x' a' u') e')       -> do
+        v@(VVar n _) <- mkVarNice ns x <$> eval e a
+        join $ conv (n:ns) <$> eval (upd (x,v) e) u <*> eval (upd (x',v) e') u'
+      (Ter (Lam x a u) e,u')                          -> do
+        v@(VVar n _) <- mkVarNice ns x <$> eval e a
+        join $ conv (n:ns) <$> eval (upd (x,v) e) u <*> app u' v
+      (u',Ter (Lam x a u) e)                          -> do
+        v@(VVar n _) <- mkVarNice ns x <$> eval e a
+        join $ conv (n:ns) <$> app u' v <*> eval (upd (x,v) e) u
+      (Ter (Split _ p _ _) e,Ter (Split _ p' _ _) e') -> pure (p == p') <&&> conv ns e e'
+      (Ter (Sum p _ _) e,Ter (Sum p' _ _) e')         -> pure (p == p') <&&> conv ns e e'
+      (Ter (HSum p _ _) e,Ter (HSum p' _ _) e')       -> pure (p == p') <&&> conv ns e e'
+      (Ter (Undef p _) e,Ter (Undef p' _) e')         -> pure (p == p') <&&> conv ns e e'
+      (Ter (Hole p) e,Ter (Hole p') e')               -> pure (p == p') <&&> conv ns e e'
+      -- (Ter Hole{} e,_)                             -> return True
+      -- (_,Ter Hole{} e')                            -> return True
+      (VPi u v,VPi u' v')                             -> do
         let w@(VVar n _) = mkVarNice ns "X" u
-        in conv ns u u' && conv (n:ns) (app v w) (app v' w)
-      (VSigma u v,VSigma u' v')                       ->
+        conv ns u u' <&&> join (conv (n:ns) <$> app v w <*> app v' w)
+      (VSigma u v,VSigma u' v')                       -> do
         let w@(VVar n _) = mkVarNice ns "X" u
-        in conv ns u u' && conv (n:ns) (app v w) (app v' w)
-      (VCon c us,VCon c' us')                         -> (c == c') && conv ns us us'
+        conv ns u u' <&&> join (conv (n:ns) <$> app v w <*> app v' w)
+      (VCon c us,VCon c' us')                         -> pure (c == c') <&&> conv ns us us'
       (VPCon c v us phis,VPCon c' v' us' phis')       ->
-        (c == c') && conv ns (v,us,phis) (v',us',phis')
-      (VPair u v,VPair u' v')                         -> conv ns u u' && conv ns v v'
-      (VPair u v,w)                                   -> conv ns u (fstVal w) && conv ns v (sndVal w)
-      (w,VPair u v)                                   -> conv ns (fstVal w) u && conv ns (sndVal w) v
+        pure (c == c') <&&> conv ns (v,us,phis) (v',us',phis')
+      (VPair u v,VPair u' v')                         -> conv ns u u' <&&> conv ns v v'
+      (VPair u v,w)                                   -> conv ns u (fstVal w) <&&> conv ns v (sndVal w)
+      (w,VPair u v)                                   -> conv ns (fstVal w) u <&&> conv ns (sndVal w) v
       (VFst u,VFst u')                                -> conv ns u u'
       (VSnd u,VSnd u')                                -> conv ns u u'
-      (VApp u v,VApp u' v')                           -> conv ns u u' && conv ns v v'
-      (VSplit u v,VSplit u' v')                       -> conv ns u u' && conv ns v v'
-      (VOpaque x _, VOpaque x' _)                     -> x == x'
-      (VVar x _, VVar x' _)                           -> x == x'
-      (VPathP a b c,VPathP a' b' c')                  -> conv ns a a' && conv ns b b' && conv ns c c'
+      (VApp u v,VApp u' v')                           -> conv ns u u' <&&> conv ns v v'
+      (VSplit u v,VSplit u' v')                       -> conv ns u u' <&&> conv ns v v'
+      (VOpaque x _, VOpaque x' _)                     -> return $ x == x'
+      (VVar x _, VVar x' _)                           -> return $ x == x'
+      (VPathP a b c,VPathP a' b' c')                  -> conv ns a a' <&&> conv ns b b' <&&> conv ns c c'
       (VPLam i a,VPLam i' a')                         -> conv ns (a `swap` (i,j)) (a' `swap` (i',j))
-      (VPLam i a,p')                                  -> conv ns (a `swap` (i,j)) (p' @@ j)
-      (p,VPLam i' a')                                 -> conv ns (p @@ j) (a' `swap` (i',j))
+      (VPLam i a,p')                                  -> join $ conv ns (a `swap` (i,j)) <$> p' @@ j
+      (p,VPLam i' a')                                 -> join $ conv ns <$> p @@ j <*> pure (a' `swap` (i',j))
       (VAppII u x,VAppII u' x')                       -> conv ns (u,x) (u',x')
       (VCoe r s a u,VCoe r' s' a' u')                 -> conv ns (r,s,a,u) (r',s',a',u')
         -- -- TODO: Maybe identify via (- = 1)?  Or change argument to a system..
         -- conv ns (a,invSystem phi One,u) (a',invSystem phi' One,u')
         -- conv ns (a,phi,u) (a',phi',u')
       (VHCom r s a us u0,VHCom r' s' a' us' u0')      -> conv ns (r,s,a,us,u0) (r',s',a',us',u0')
-      (VV i a b e,VV i' a' b' e')                     -> i == i' && conv ns (a,b,e) (a',b',e')
+      (VV i a b e,VV i' a' b' e')                     -> pure (i == i') <&&> conv ns (a,b,e) (a',b',e')
       (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
-      (VVproj i o _ _ _,VVproj i' o' _ _ _)           -> i == i' && conv ns o o'
+      (VVproj i o _ _ _,VVproj i' o' _ _ _)           -> pure (i == i') <&&> conv ns o o'
       -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
       -- (VUnGlueElem u _ _,VUnGlueElem u' _ _)       -> conv ns u u'
       -- (VHCompU u es,VHCompU u' es')                -> conv ns (u,es) (u',es')
-      _                                               -> False
+      _                                               -> return $ False
 
 instance Convertible Ctxt where
-  conv _ _ _ = True
+  conv _ _ _ = return True
 
 instance Convertible () where
-  conv _ _ _ = True
+  conv _ _ _ = return True
+
+(<&&>) :: Monad m => m Bool -> m Bool -> m Bool
+u <&&> v = do
+  b1 <- u
+  b2 <- v
+  return (b1 && b2)
 
 instance (Convertible a, Convertible b) => Convertible (a, b) where
-  conv ns (u,v) (u',v') = conv ns u u' && conv ns v v'
+  conv ns (u,v) (u',v') = conv ns u u' <&&> conv ns v v'
 
 instance (Convertible a, Convertible b, Convertible c)
       => Convertible (a, b, c) where
-  conv ns (u,v,w) (u',v',w') = conv ns (u,(v,w)) (u',(v',w'))
+  conv ns (u,v,w) (u',v',w') =
+    conv ns u u' <&&> conv ns v v' <&&> conv ns w w'
 
 instance (Convertible a,Convertible b,Convertible c,Convertible d)
       => Convertible (a,b,c,d) where
-  conv ns (u,v,w,x) (u',v',w',x') = conv ns (u,v,(w,x)) (u',v',(w',x'))
+  conv ns (u,v,w,x) (u',v',w',x') =
+    conv ns u u' <&&> conv ns v v' <&&> conv ns w w' <&&> conv ns x x'
 
 instance (Convertible a,Convertible b,Convertible c,Convertible d,Convertible e)
       => Convertible (a,b,c,d,e) where
-  conv ns (u,v,w,x,y) (u',v',w',x',y') = conv ns (u,v,w,(x,y)) (u',v',w',(x',y'))
+  conv ns (u,v,w,x,y) (u',v',w',x',y') =
+    conv ns u u' <&&> conv ns v v' <&&> conv ns w w' <&&> conv ns x x' <&&>
+    conv ns y y'
 
 instance (Convertible a,Convertible b,Convertible c,Convertible d,Convertible e,Convertible f)
       => Convertible (a,b,c,d,e,f) where
-  conv ns (u,v,w,x,y,z) (u',v',w',x',y',z') = conv ns (u,v,w,x,(y,z)) (u',v',w',x',(y',z'))
+  conv ns (u,v,w,x,y,z) (u',v',w',x',y',z') =
+    conv ns u u' <&&> conv ns v v' <&&> conv ns w w' <&&> conv ns x x' <&&>
+    conv ns y y' <&&> conv ns z z'
 
 instance Convertible a => Convertible [a] where
-  conv ns us us' = length us == length us' &&
-                   and [conv ns u u' | (u,u') <- zip us us']
+  conv ns us us' = do
+    bs <- sequence [ conv ns u u' | (u,u') <- zip us us' ] 
+    return (length us == length us' && and bs)
 
 instance (Convertible a,Nominal a) => Convertible (System a) where
   conv ns (Triv u) (Triv u') = conv ns u u'
-  conv ns (Sys us) (Sys us') =
-    let compare eqn u u' = conv ns (u `subst` toSubst eqn) (u' `subst` toSubst eqn)
-    in Map.keys us == Map.keys us' &&
-       and (Map.elems (Map.intersectionWithKey compare us us'))
+  conv ns (Sys us) (Sys us') = do
+    let compare eqn u u' = join $ conv ns <$> u `subst` toSubst eqn <*> u' `subst` toSubst eqn
+    bs <- T.sequence $ Map.elems (Map.intersectionWithKey compare us us')
+    return $ Map.keys us == Map.keys us' && and bs
 
 instance Convertible II where
-  conv _ r s = r == s
+  conv _ r s = return $ r == s
 
 instance Convertible (Nameless a) where
-  conv _ _ _ = True
+  conv _ _ _ = return $ True
 
 -------------------------------------------------------------------------------
 -- | Normalization
 
 class Normal a where
-  normal :: [String] -> a -> a
+  normal :: [String] -> a -> Eval a
 
 instance Normal Env where
-  normal ns (Env (rho,vs,fs,os)) = Env (normal ns (rho,vs,fs,os))
+  normal ns (Env (rho,vs,fs,os)) = Env <$> normal ns (rho,vs,fs,os)
 
 instance Normal Val where
   normal ns v = case v of
-    VU                     -> VU
-    Ter (Lam x t u) e      ->
-      let w = eval e t
-          v@(VVar n _) = mkVarNice ns x w
-      in VLam n (normal ns w) $ normal (n:ns) (eval (upd (x,v) e) u)
-    Ter t e                -> Ter t (normal ns e)
-    VPi u v                -> VPi (normal ns u) (normal ns v)
-    VSigma u v             -> VSigma (normal ns u) (normal ns v)
-    VPair u v              -> VPair (normal ns u) (normal ns v)
-    VCon n us              -> VCon n (normal ns us)
-    VPCon n u us phis      -> VPCon n (normal ns u) (normal ns us) phis
-    VPathP a u0 u1         -> VPathP (normal ns a) (normal ns u0) (normal ns u1)
-    VPLam i u              -> VPLam i (normal ns u)
-    VCoe r s a u           -> VCoe (normal ns r) (normal ns s) (normal ns a) (normal ns u)
-    VHCom r s u vs v       -> VHCom (normal ns r) (normal ns s) (normal ns u) (normal ns vs) (normal ns v)
-    VV i a b e             -> VV i (normal ns a) (normal ns b) (normal ns e)
-    VVin i m n             -> VVin i (normal ns m) (normal ns n)
-    VVproj i o a b e       -> VVproj i (normal ns o) (normal ns a) (normal ns b) (normal ns e)
+    VU                     -> return VU
+    Ter (Lam x t u) e      -> do
+      w <- eval e t
+      let v@(VVar n _) = mkVarNice ns x w
+      u' <- eval (upd (x,v) e) u
+      VLam n <$> normal ns w <*> normal (n:ns) u'
+    Ter t e                -> Ter t <$> normal ns e
+    VPi u v                -> VPi <$> normal ns u <*> normal ns v
+    VSigma u v             -> VSigma <$> normal ns u <*> normal ns v
+    VPair u v              -> VPair <$> normal ns u <*> normal ns v
+    VCon n us              -> VCon n <$> normal ns us
+    VPCon n u us phis      -> VPCon n <$> normal ns u <*> normal ns us <*> pure phis
+    VPathP a u0 u1         -> VPathP <$> normal ns a <*> normal ns u0 <*> normal ns u1
+    VPLam i u              -> VPLam i <$> normal ns u
+    VCoe r s a u           -> VCoe <$> normal ns r <*> normal ns s <*> normal ns a <*> normal ns u
+    VHCom r s u vs v       -> VHCom <$> normal ns r <*> normal ns s <*> normal ns u <*> normal ns vs <*> normal ns v
+    VV i a b e             -> VV i <$> normal ns a <*> normal ns b <*> normal ns e
+    VVin i m n             -> VVin i <$> normal ns m <*> normal ns n
+    VVproj i o a b e       -> VVproj i <$> normal ns o <*> normal ns a <*> normal ns b <*> normal ns e
     -- VGlue u equivs      -> VGlue (normal ns u) (normal ns equivs)
     -- VGlueElem u us      -> VGlueElem (normal ns u) (normal ns us)
     -- VUnGlueElem v u us  -> VUnGlueElem (normal ns v) (normal ns u) (normal ns us)
     -- VUnGlueElemU e u us -> VUnGlueElemU (normal ns e) (normal ns u) (normal ns us)
     -- VHCompU a ts        -> VHCompU (normal ns a) (normal ns ts)
-    VVar x t               -> VVar x (normal ns t)
-    VFst t                 -> VFst (normal ns t)
-    VSnd t                 -> VSnd (normal ns t)
-    VSplit u t             -> VSplit (normal ns u) (normal ns t)
-    VApp u v               -> VApp (normal ns u) (normal ns v)
-    VAppII u phi           -> VAppII (normal ns u) (normal ns phi)
-    _                      -> v
+    VVar x t               -> VVar x <$> normal ns t
+    VFst t                 -> VFst <$> normal ns t
+    VSnd t                 -> VSnd <$> normal ns t
+    VSplit u t             -> VSplit <$> normal ns u <*> normal ns t
+    VApp u v               -> VApp <$> normal ns u <*> normal ns v
+    VAppII u phi           -> VAppII <$> normal ns u <*> normal ns phi
+    _                      -> return v
 
 instance Normal (Nameless a) where
-  normal _ = id
+  normal _ = return
 
 instance Normal Ctxt where
-  normal _ = id
+  normal _ = return
 
 instance Normal II where
-  normal _ = id
+  normal _ = return
 
 instance (Nominal a, Normal a) => Normal (System a) where
-  normal ns (Triv u) = Triv (normal ns u)
-  normal ns (Sys us) =
-    Sys (Map.mapWithKey (\eqn u -> normal ns (u `subst` toSubst eqn)) us)
+  normal ns (Triv u) = Triv <$> normal ns u
+  normal ns (Sys us) = do
+    us' <- T.sequence $
+           Map.mapWithKey (\eqn u -> join (normal ns <$> u `subst` toSubst eqn)) us
+    return $ Sys us'
 
 instance (Normal a,Normal b) => Normal (a,b) where
-  normal ns (u,v) = (normal ns u,normal ns v)
+  normal ns (u,v) = do
+    u' <- normal ns u
+    v' <- normal ns v
+    return (u',v')
 
 instance (Normal a,Normal b,Normal c) => Normal (a,b,c) where
-  normal ns (u,v,w) = (normal ns u,normal ns v,normal ns w)
+  normal ns (u,v,w) = do
+    u' <- normal ns u
+    v' <- normal ns v
+    w' <- normal ns w
+    return (u',v',w')
 
 instance (Normal a,Normal b,Normal c,Normal d) => Normal (a,b,c,d) where
-  normal ns (u,v,w,x) =
-    (normal ns u,normal ns v,normal ns w, normal ns x)
+  normal ns (u,v,w,x) = do
+    u' <- normal ns u
+    v' <- normal ns v
+    w' <- normal ns w
+    x' <- normal ns x    
+    return (u',v',w',x')
 
 instance Normal a => Normal [a] where
-  normal ns = map (normal ns)
+  normal ns = mapM (normal ns)
