@@ -315,24 +315,29 @@ v @@ phi = do
 com :: II -> II -> Val -> System Val -> Val -> Eval Val
 com r s a _ u0 | r == s = return u0
 com _ s _ (Triv u) _  = u @@ s
-com r s a us u0 =
-  join $ hcom r s <$> a @@ s <*> mapSystem (\j u -> coe (Name j) s a u) us <*> coe r s a u0
+com r s a (Sys us) u0 = do
+  us' <- Sys <$> mapSystem (\j u -> coe (Name j) s a u) us
+  join $ hcom r s <$> a @@ s <*> pure us' <*> coe r s a u0
 
--- apply f to each face (with its binder), eta-expanding where needed
-mapSystem :: (Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
-mapSystem f (Triv (VPLam i u)) = Triv . VPLam i <$> f i u
-mapSystem f (Triv u) = do
+-- apply f to each face, eta-expanding where needed, without freshening
+mapSystemUnsafe :: (Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+mapSystemUnsafe f us = do
   j <- fresh
-  uj <- u @@ j
-  Triv . VPLam j <$> f j uj
-mapSystem f (Sys us) = do
-  let etaMap (VPLam i u) = VPLam i <$> f i u
+  let etaMap (VPLam i u) = VPLam i <$> f u
       etaMap u = do
-        j <- fresh
+        uj <- u @@ j
+        VPLam j <$> f uj
+  T.sequence $ Map.map etaMap us
+
+-- apply f to each face, with binder, with freshening
+mapSystem :: (Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+mapSystem f us = do
+  j <- fresh
+  let etaMap (VPLam i u) = VPLam j <$> f j (u `swap` (i,j))
+      etaMap u = do
         uj <- u @@ j
         VPLam j <$> f j uj
-  xs <- T.sequence $ Map.map etaMap us
-  return (Sys xs)
+  T.sequence $ Map.map etaMap us
 
 hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
 hcom r s _ _ u0 | r == s = return u0
@@ -341,17 +346,17 @@ hcom r s a (Sys us) u0   = case a of
   VPathP a v0 v1 -> trace "hcom path" $ do
     j <- fresh
     us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
-             mapSystem (const (@@ j)) (Sys us)
+             Sys <$> mapSystemUnsafe (@@ j) us
     aj <- a @@ j
     u0j <- u0 @@ j
-    VPLam j <$> hcom r s aj us' u0j
+    return $ VPLam j $ VHCom r s aj us' u0j
   VSigma a b -> trace "hcom sigma" $ do
     j <- fresh
-    us1 <- mapSystem (const (return . fstVal)) (Sys us)
-    us2 <- mapSystem (const (return . sndVal)) (Sys us)
+    us1 <- Sys <$> mapSystemUnsafe (return . fstVal) us
+    us2 <- Sys <$> mapSystemUnsafe (return . sndVal) us
     let (u1,u2) = (fstVal u0,sndVal u0)
-    u1fill <- hcom r (Name j) a us1 u1
-    u1hcom <- hcom r s a us1 u1
+    let u1fill = VHCom r (Name j) a us1 u1
+        u1hcom = VHCom r s a us1 u1
     bj <- VPLam j <$> app b u1fill
     VPair u1hcom <$> com r s bj us2 u2
   -- VU -> error "hcom U"
@@ -494,10 +499,10 @@ coe r s (VPLam i a) u = case a of
     let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
     bij <- app (b `swap` (i,j)) u1'
-    VPair <$> coe r s (VPLam i a) u1 <*> coe r s (VPLam j bij) u2
+    return $ VPair (VCoe r s (VPLam i a) u1) (VCoe r s (VPLam j bij) u2)
   VPi{} -> return $ VCoe r s (VPLam i a) u
   VU -> return u
-  VV j a b e -> vvcoe i j r s a b e u
+  v@(VV j a b e) -> vvcoe (VPLam i v) r s u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> return u -- hardcode hack
     | otherwise -> error "coe sum"
@@ -512,8 +517,8 @@ coe r s a u = return $ VCoe r s a u
 
 -- TODO
 -- In Part 3: i corresponds to y, and, j to x
-vvcoe :: Name -> Name -> II -> II -> Val -> Val -> Val -> Val -> Eval Val
-vvcoe i j r s a b e u | i /= j = trace "vvcoe i != j" $ do
+vvcoe :: Val -> II -> II -> Val -> Eval Val
+vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
   vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
   vj1 <- coe r (Name i) (VPLam i b) u
   let tvec = mkSystem [(j~>0,vj0),(j~>1,vj1)]
@@ -521,11 +526,12 @@ vvcoe i j r s a b e u | i /= j = trace "vvcoe i != j" $ do
   vr <- vproj (Name j) u ar br er
   vin (Name j) <$> coe r s (VPLam i a) u
                <*> com r s (VPLam i b) tvec vr
-vvcoe j _ (Dir Zero) s a b e u = trace "vvcoe j->0" $ do
+
+vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe j->0" $ do
   ej0 <- equivFun e `subst` (j,0)
   ej0u <- app ej0 u
   vin s u <$> coe 0 s (VPLam j b) ej0u
-vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe j->1" $ do
   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
                               <*> coe 1 s (VPLam j b) u)
   u' <- VPLam (N "_") <$> coe 1 s (VPLam j b) u
@@ -536,7 +542,7 @@ vvcoe j _ (Dir One) s a b e u = trace "vvcoe j->1" $ do
                          <*> pure psys
                          <*> coe 1 s (VPLam j b) u
   return $ vin s (fstVal otm) ptm
-vvcoe j _ (Name i) s a b e u = trace "vvcoe j->i" $ do
+vvcoe (VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe j->i" $ do
   -- i = y
   -- j = x
   -- k = w

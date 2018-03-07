@@ -36,6 +36,7 @@ executable yacctt
       haskeline,
       time,
       filepath,
-      directory
+      directory,
+      monad-gen
   build-tools: alex, happy, bnfc
   default-language: Haskell2010
