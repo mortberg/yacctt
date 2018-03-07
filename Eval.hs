@@ -527,22 +527,21 @@ vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
   vin (Name j) <$> coe r s (VPLam i a) u
                <*> com r s (VPLam i b) tvec vr
 
-vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe j->0" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
   ej0 <- equivFun e `subst` (j,0)
-  ej0u <- app ej0 u
-  vin s u <$> coe 0 s (VPLam j b) ej0u
-vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe j->1" $ do
+  return $ vin s u $ VCoe 0 s (VPLam j b) (VApp ej0 u)
+
+vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
                               <*> coe 1 s (VPLam j b) u)
-  u' <- VPLam (N "_") <$> coe 1 s (VPLam j b) u
-  i <- fresh
-  otmi <- sndVal otm @@ i
-  let psys = mkSystem [(s~>0,VPLam i otmi),(s~>1,u')]
+  u' <- coe 1 s (VPLam j b) u
+  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u')]
   ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
                          <*> pure psys
-                         <*> coe 1 s (VPLam j b) u
+                         <*> pure u'
   return $ vin s (fstVal otm) ptm
-vvcoe (VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe j->i" $ do
+
+vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
   -- i = y
   -- j = x
   -- k = w
@@ -550,12 +549,12 @@ vvcoe (VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe j->i" $ do
   k <- fresh
   l <- fresh
   let (ak,bk,ek) = (a,b,e) `swap` (j,k)
-      u' eps = coe eps (Name k) (VPLam j (vtype (Name j) a b e)) u
-      otm eps = join $ vproj (Name k) <$> u' eps <*> pure ak <*> pure bk <*> pure ek
-  o0 <- otm 0
-  o1 <- otm 1
+      u' eps = VCoe eps (Name k) vty u
+      otm eps = VVproj k (u' eps) ak bk ek
+  let o0 = otm 0
+  let o1 = otm 1
   let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
-  let (ai,bi,ei) = (a,b,e) `swap` (j,i)
+  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
   ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
                  <$> vproj (Name i) u ai bi ei
   p0 <- ptm `subst` (j,0)
@@ -564,25 +563,23 @@ vvcoe (VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe j->i" $ do
         e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
         return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
       qtm eps t = do
-        t' <- coe eps (Name i) (VPLam i a0) t
+        let t' = VCoe eps (Name i) (VPLam i a0) t
         p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
         return $ VPair t' (VPLam l p0')
   e0p02 <- sndVal <$> app (equivContr e0) p0
   u0 <- u `subst` (i,0)
   e0p02q <- join $ app e0p02 <$> qtm 0 u0
-  foo <- coe 1 0 (VPLam j (vtype (Name j) a b e)) u
+  foo <- coe 1 0 vty u
   foo1 <- foo `subst` (i,1)
   q1 <- qtm 1 foo1
   rtm' <- app e0p02q q1
   rtm <- rtm' @@ i
   (as,bs,es) <- (a,b,e) `subst` (j,s)
   (o0s,o1s) <- (o0,o1) `subst` (k,s)
-  vs <- vproj s u as bs es
-  rtml <- sndVal rtm @@ l
   let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
                       ,(i~>1,VPLam (N "_") o1s)
-                      ,(i~>s,VPLam (N "_") vs)
-                      ,(s~>0,VPLam l rtml)]
+                      ,(i~>s,VPLam (N "_") $ VVproj i u as bs es)
+                      ,(s~>0,sndVal rtm)]
   ptms <- ptm `subst` (j,s)
   vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
 
