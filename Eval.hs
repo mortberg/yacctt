@@ -246,7 +246,7 @@ app u v = case (u,v) of
     w <- coe s (Name j) (VPLam i a) v
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
-    join $ coe r s bijw <$> app u0 w0
+    coe r s bijw =<< app u0 w0
   (VHCom r s (VPi a b) (Sys us) u0, v) -> trace "hcom pi" $ do
     us' <- mapSystem (\_ u -> return $ VApp u v) us
     VHCom r s <$> app b v <*> pure (Sys us') <*> app u0 v
