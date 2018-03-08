@@ -247,14 +247,10 @@ app u v = case (u,v) of
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
     join $ coe r s bijw <$> app u0 w0
-  (VHCom r s (VPi a b) (Sys us) u0, v) -> undefined -- trace "hcom pi" $
-    -- let i = fresh (u,v)
-    -- in hcom i r s
-    --         (app b v)
-    --         (Sys (Map.mapWithKey (\al ual -> app (ual @@ i) (v `subst` toSubst al)) us))
-    --         (app u0 v)
-  (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv" -- TODO: rewrite it instead of implementing
---  _ | isNeutral u       -> VApp u v
+  (VHCom r s (VPi a b) (Sys us) u0, v) -> trace "hcom pi" $ do
+    us' <- mapSystem (\_ u -> return $ VApp u v) us
+    VHCom r s <$> app b v <*> pure (Sys us') <*> app u0 v
+  (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
   _                     -> return $ VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
 
 fstVal, sndVal :: Val -> Val
