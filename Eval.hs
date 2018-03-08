@@ -535,7 +535,7 @@ vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
                               <*> coe 1 s (VPLam j b) u)
   u' <- coe 1 s (VPLam j b) u
-  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u')]
+  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u)]
   ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
                          <*> pure psys
                          <*> pure u'
