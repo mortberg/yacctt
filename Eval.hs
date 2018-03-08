@@ -240,14 +240,14 @@ app u v = case (u,v) of
     -- _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
                     -> return (VSplit u v)
-  (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $ do
+  (VCoe r s (VPLam i (VPi a b)) u0, v) -> do -- trace "coe pi" $ do
     j <- fresh
     let bij = b `swap` (i,j)
     w <- coe s (Name j) (VPLam i a) v
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
     coe r s bijw =<< app u0 w0
-  (VHCom r s (VPi a b) (Sys us) u0, v) -> trace "hcom pi" $ do
+  (VHCom r s (VPi a b) (Sys us) u0, v) -> do -- trace "hcom pi" $ do
     us' <- mapSystem (\_ u -> return $ VApp u v) us
     VHCom r s <$> app b v <*> pure (Sys us') <*> app u0 v
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
@@ -339,14 +339,14 @@ hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
 hcom r s _ _ u0 | r == s = return u0
 hcom r s _ (Triv u) _    = u @@ s
 hcom r s a (Sys us) u0   = case a of
-  VPathP a v0 v1 -> trace "hcom path" $ do
+  VPathP a v0 v1 -> do -- trace "hcom path" $ do
     j <- fresh
     us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
              Sys <$> mapSystemUnsafe (@@ j) us
     aj <- a @@ j
     u0j <- u0 @@ j
     return $ VPLam j $ VHCom r s aj us' u0j
-  VSigma a b -> trace "hcom sigma" $ do
+  VSigma a b -> do -- trace "hcom sigma" $ do
     j <- fresh
     us1 <- Sys <$> mapSystemUnsafe (return . fstVal) us
     us2 <- Sys <$> mapSystemUnsafe (return . sndVal) us
@@ -485,12 +485,12 @@ hcom r s a (Sys us) u0   = case a of
 coe :: II -> II -> Val -> Val -> Eval Val
 coe r s a u | r == s = return u
 coe r s (VPLam i a) u = case a of
-  VPathP a v0 v1 -> trace "coe path" $ do
+  VPathP a v0 v1 -> do -- trace "coe path" $ do
     j <- fresh
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
     return $ VPLam j out
-  VSigma a b -> trace "coe sigma" $ do
+  VSigma a b -> do -- trace "coe sigma" $ do
     j <- fresh
     let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
