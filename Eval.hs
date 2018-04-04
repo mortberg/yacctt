@@ -83,6 +83,9 @@ instance Nominal Val where
     VV i a b e        -> x == i || occurs x (a,b,e)
     VVin i m n        -> x == i || occurs x (m,n)
     VVproj i o a b e  -> x == i || occurs x (o,a,b,e)
+    VHComU r s t ts   -> occurs x (r,s,t,ts)
+    VBox r s t ts     -> occurs x (r,s,t,ts)
+    VCap r s t ts     -> occurs x (r,s,t,ts)
     -- VGlue a ts              -> occurs x (a,ts)
     -- VGlueElem a ts          -> occurs x (a,ts)
     -- VUnGlueElem a b ts      -> occurs x (a,b,ts)
@@ -119,6 +122,9 @@ instance Nominal Val where
       vin <$> subst (Name j) (i,r) <*> subst m (i,r) <*> subst n (i,r)
     VVproj j o a b e               ->
       join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
+    VHComU s s' t ts   -> undefined
+    VBox s s' t ts     -> undefined
+    VCap s s' t ts     -> undefined
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -152,6 +158,9 @@ instance Nominal Val where
          VV i a b e        -> VV (swapName i ij) (sw a) (sw b) (sw e)
          VVin i m n        -> VVin (swapName i ij) (sw m) (sw n)
          VVproj i o a b e  -> VVproj (swapName i ij) (sw o) (sw a) (sw b) (sw e)
+         VHComU s s' t ts  -> undefined
+         VBox s s' t ts    -> undefined
+         VCap s s' t ts    -> undefined         
          -- VGlue a ts              -> VGlue (sw a) (sw ts)
          -- VGlueElem a ts          -> VGlueElem (sw a) (sw ts)
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
@@ -194,7 +203,10 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
   V r a b e             -> vtype <$> pure (evalII rho r) <*> eval rho a <*> eval rho b <*> eval rho e
   Vin r m n             -> vin <$> pure (evalII rho r) <*> eval rho m <*> eval rho n
-  Vproj r o a b e       -> join $ vproj (evalII rho r) <$> eval rho o <*> eval rho a <*> eval rho b <*> eval rho e
+  Vproj r o a b e       ->
+    join $ vproj (evalII rho r) <$> eval rho o <*> eval rho a <*> eval rho b <*> eval rho e
+  Box r s t ts          -> undefined
+  Cap r s t ts          -> undefined
   -- Glue a ts          -> glue (eval rho a) (evalSystem rho ts)
   -- GlueElem a ts      -> glueElem (eval rho a) (evalSystem rho ts)
   -- UnGlueElem v a ts  -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
@@ -290,6 +302,8 @@ inferType v = case v of
   VHCom r s a _ _ -> return a
   VCoe r s a _ -> a @@ s
   VVproj _ _ _ b _ -> return b
+  VHComU _ _ _ _ -> return VU
+  VCap _ _ t _ -> return t -- TODO: is this correct?
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
@@ -979,6 +993,10 @@ instance Convertible Val where
       (VV i a b e,VV i' a' b' e')                     -> pure (i == i') <&&> conv ns (a,b,e) (a',b',e')
       (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
       (VVproj i o _ _ _,VVproj i' o' _ _ _)           -> pure (i == i') <&&> conv ns o o'
+      (VHComU r s t ts,VHComU r' s' t' ts')           -> conv ns (r,s,t,ts) (r',s',t',ts')
+      -- TODO: are the following two cases correct?
+      (VCap r s t ts,VCap r' s' t' ts')               -> conv ns (r,s,t,ts) (r',s',t',ts')
+      (VBox r s t ts,VBox r' s' t' ts')               -> conv ns (r,s,t,ts) (r',s',t',ts')
       -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
