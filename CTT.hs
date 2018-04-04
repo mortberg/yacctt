@@ -114,12 +114,18 @@ data Ter = Pi Ter
          | Coe II II Ter Ter
            -- Homogeneous Kan composition
          | HCom II II Ter (System Ter) Ter
-           -- Kan composition           
+           -- Kan composition
          -- | Com II II Ter (System Ter) Ter
+
            -- V-types
          | V II Ter Ter Ter -- V r A B E    (where E : A ~= B)
          | Vin II Ter Ter -- Vin r M N      (where M : A and N : B)
          | Vproj II Ter Ter Ter Ter -- Vproj r O A B E    (where O : V r A B E)
+
+           -- Universes
+         | Box II II Ter (System Ter)
+         | Cap II II Ter (System Ter)
+
            -- Glue
          -- | Glue Ter (System Ter)
          -- | GlueElem Ter (System Ter)
@@ -155,11 +161,8 @@ data Val = VU
            -- Path values
          | VPathP Val Val Val
          | VPLam Name Val
-      
-           -- Composition in the universe. Should be FCom
-         -- | VHCompU Val (System Val)
 
-           -- Composition; the type is constant
+           -- Homogeneous composition; the type is constant
          | VHCom II II Val (System Val) Val
 
            -- Coe
@@ -175,6 +178,11 @@ data Val = VU
          -- | VGlueElem Val (System Val)
          -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
+         -- Universe values
+         | VHComU II II Val (System Val)
+         | VBox II II Val (System Val)
+         | VCap II II Val (System Val)
+
            -- Neutral values:
          | VVar Ident Val
          | VOpaque Ident Val
@@ -189,21 +197,22 @@ data Val = VU
 
 isNeutral :: Val -> Bool
 isNeutral v = case v of
-  Ter Undef{} _  -> True
-  Ter Hole{} _   -> True
-  VVar{}         -> True
-  VOpaque{}      -> True
-  VHCom{}       -> True
-  VCoe{}        -> True
-  VFst{}         -> True
-  VSnd{}         -> True
-  VSplit{}       -> True
-  VApp{}         -> True
-  VAppII{}  -> True
+  Ter Undef{} _     -> True
+  Ter Hole{} _      -> True
+  VVar{}            -> True
+  VOpaque{}         -> True
+  VHCom{}           -> True
+  VCoe{}            -> True
+  VFst{}            -> True
+  VSnd{}            -> True
+  VSplit{}          -> True
+  VApp{}            -> True
+  VAppII{}          -> True
   -- VUnGlueElemU{} -> True
   -- VUnGlueElem{}  -> True
-  VVproj{}       -> True
-  _              -> False
+  VCap{}            -> True
+  VVproj{}          -> True
+  _                 -> False
 
 isNeutralSystem :: System Val -> Bool
 isNeutralSystem (Sys xs) = any isNeutral (Map.elems xs)
@@ -364,7 +373,8 @@ showTer v = case v of
   U                    -> char 'U'
   App e0 e1            -> showTer e0 <+> showTer1 e1
   Pi e0                -> text "Pi" <+> showTer e0
-  Lam x t e            -> char '\\' <> parens (text x <+> colon <+> showTer t) <+> text " ->" <+> showTer e
+  Lam x t e            ->
+    char '\\' <> parens (text x <+> colon <+> showTer t) <+> text " ->" <+> showTer e
   Fst e                -> showTer1 e <> text ".1"
   Snd e                -> showTer1 e <> text ".2"
   Sigma e0             -> text "Sigma" <+> showTer1 e0
@@ -372,7 +382,8 @@ showTer v = case v of
   Where e d            -> showTer e <+> text "where" <+> showDecls d
   Var x                -> text x
   Con c es             -> text c <+> showTers es
-  PCon c a es phis     -> text c <+> braces (showTer a) <+> showTers es <+> hsep (map ((char '@' <+>) . showII) phis)
+  PCon c a es phis     ->
+    text c <+> braces (showTer a) <+> showTers es <+> hsep (map ((char '@' <+>) . showII) phis)
   Split f _ _ _        -> text f
   Sum _ n _            -> text n
   HSum _ n _           -> text n
@@ -381,12 +392,18 @@ showTer v = case v of
   PathP e0 e1 e2       -> text "PathP" <+> showTers [e0,e1,e2]
   PLam i e             -> char '<' <> text (show i) <> char '>' <+> showTer e
   AppII e phi          -> showTer1 e <+> char '@' <+> showII phi
-  HCom r s a ts t      -> text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
-  Coe r s e t0         -> text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
+  HCom r s a ts t      ->
+    text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
+  Coe r s e t0         ->
+    text "coe" <+> showII r <> text "->" <> showII s <+> showTer1 e <+> showTer1 t0
   -- Comp e t ts       -> text "comp" <+> showTers [e,t] <+> text (show ts)
   V r a b e            -> text "V" <+> showII r <+> showTers [a,b,e]
   Vin r m n            -> text "Vin" <+> showII r <+> showTers [m,n]
   Vproj r o a b e      -> text "Vproj" <+> showII r <+> showTers [o,a,b,e]
+  Box r s t ts ->
+    text "box" <+> showII r <> text "->" <> showII s <+> showTer1 t <+> text (show ts)
+  Cap r s t ts ->
+    text "cap" <+> showII r <> text "->" <> showII s <+> showTer1 t <+> text (show ts)
   -- Glue a ts         -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts     -> text "glue" <+> showTer1 a <+> text (show ts)
   -- UnGlueElem a b ts -> text "unglue" <+> showTers [a,b] <+> text (show ts)
@@ -449,12 +466,16 @@ showVal v = case v of
   VV i a b e             -> text "V" <+> text (show i) <+> showVals [a,b,e]
   VVin i m n             -> text "Vin" <+> text (show i) <+> showVals [m,n]
   VVproj i o a b e       -> text "Vproj" <+> text (show i) <+> showVals [o,a,b,e]
+  VBox r s t ts          ->
+    text "box" <+> showII r <> text "->" <> showII s <+> showVal1 t <+> text (show ts)
+  VCap r s t ts          ->
+    text "cap" <+> showII r <> text "->" <> showII s <+> showVal1 t <+> text (show ts)
+  VHComU r s t ts       ->
+    text "hcomp U" <+> showII r <> text "->" <> showII s <+> showVal t <+> text (show ts)
   -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
   -- VGlueElem a ts      -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)
-  -- VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b]
-  --                        <+> text (show es)
-  -- VHCompU a ts        -> text "hcomp U" <+> showVal1 a <+> text (show ts)
+  -- VUnGlueElemU v b es -> text "unglue U" <+> showVals [v,b] <+> text (show es)
 
 showPLam :: Val -> Doc
 showPLam e = case e of
