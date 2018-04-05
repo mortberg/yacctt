@@ -303,7 +303,7 @@ inferType v = case v of
   VCoe r s a _ -> a @@ s
   VVproj _ _ _ b _ -> return b
   VHComU _ _ _ _ -> return VU
-  VCap _ _ t _ -> return t -- TODO: is this correct?
+  VCap _ _ _ t -> return t -- TODO: is this correct?
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v
@@ -316,7 +316,7 @@ v @@ phi = do
   case (t,toII phi) of
     (VPathP _ a0 _,Dir 0) -> return a0
     (VPathP _ _ a1,Dir 1) -> return a1
-    _                    -> return $ VAppII v (toII phi)
+    _                     -> return $ VAppII v (toII phi)
 -- v @@ phi                   = error $ "(@@): " ++ show v ++ " should be neutral."
 
 -------------------------------------------------------------------------------
@@ -369,7 +369,7 @@ hcom r s a (Sys us) u0   = case a of
         u1hcom = VHCom r s a us1 u1
     bj <- VPLam j <$> app b u1fill
     VPair u1hcom <$> com r s bj us2 u2
-  -- VU -> error "hcom U"
+  VU -> return $ VHComU r s (Sys us) u0
   -- Ter (Sum _ n nass) env
   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"

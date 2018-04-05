@@ -123,8 +123,8 @@ data Ter = Pi Ter
          | Vproj II Ter Ter Ter Ter -- Vproj r O A B E    (where O : V r A B E)
 
            -- Universes
-         | Box II II Ter (System Ter)
-         | Cap II II Ter (System Ter)
+         | Box II II (System Ter) Ter
+         | Cap II II (System Ter) Ter
 
            -- Glue
          -- | Glue Ter (System Ter)
@@ -179,9 +179,9 @@ data Val = VU
          -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
          -- Universe values
-         | VHComU II II Val (System Val)
-         | VBox II II Val (System Val)
-         | VCap II II Val (System Val)
+         | VHComU II II (System Val) Val
+         | VBox II II (System Val) Val
+         | VCap II II (System Val) Val
 
            -- Neutral values:
          | VVar Ident Val
@@ -400,10 +400,10 @@ showTer v = case v of
   V r a b e            -> text "V" <+> showII r <+> showTers [a,b,e]
   Vin r m n            -> text "Vin" <+> showII r <+> showTers [m,n]
   Vproj r o a b e      -> text "Vproj" <+> showII r <+> showTers [o,a,b,e]
-  Box r s t ts ->
-    text "box" <+> showII r <> text "->" <> showII s <+> showTer1 t <+> text (show ts)
-  Cap r s t ts ->
-    text "cap" <+> showII r <> text "->" <> showII s <+> showTer1 t <+> text (show ts)
+  Box r s ts t ->
+    text "box" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showTer1 t
+  Cap r s ts t ->
+    text "cap" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showTer1 t
   -- Glue a ts         -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts     -> text "glue" <+> showTer1 a <+> text (show ts)
   -- UnGlueElem a b ts -> text "unglue" <+> showTers [a,b] <+> text (show ts)
@@ -466,12 +466,12 @@ showVal v = case v of
   VV i a b e             -> text "V" <+> text (show i) <+> showVals [a,b,e]
   VVin i m n             -> text "Vin" <+> text (show i) <+> showVals [m,n]
   VVproj i o a b e       -> text "Vproj" <+> text (show i) <+> showVals [o,a,b,e]
-  VBox r s t ts          ->
-    text "box" <+> showII r <> text "->" <> showII s <+> showVal1 t <+> text (show ts)
-  VCap r s t ts          ->
-    text "cap" <+> showII r <> text "->" <> showII s <+> showVal1 t <+> text (show ts)
-  VHComU r s t ts       ->
-    text "hcomp U" <+> showII r <> text "->" <> showII s <+> showVal t <+> text (show ts)
+  VBox r s ts t          ->
+    text "box" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
+  VCap r s ts t          ->
+    text "cap" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
+  VHComU r s ts t       ->
+    text "hcomp U" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
   -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
   -- VGlueElem a ts      -> text "glue" <+> showVal1 a <+> text (show ts)
   -- VUnGlueElem v a ts  -> text "unglue" <+> showVals [v,a] <+> text (show ts)

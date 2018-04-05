@@ -219,8 +219,8 @@ resolveExp e = case e of
   -- GlueElem u ts -> CTT.GlueElem <$> resolveExp u <*> resolveSystem ts
   -- UnGlueElem u v ts ->
   --   CTT.UnGlueElem <$> resolveExp u <*> resolveExp v <*> resolveSystem ts
-  Box r s t ts -> CTT.Box <$> resolveII r <*> resolveII s <*> resolveExp t <*> resolveSystem ts
-  Cap r s t ts -> CTT.Cap <$> resolveII r <*> resolveII s <*> resolveExp t <*> resolveSystem ts
+  Box r s ts t -> CTT.Box <$> resolveII r <*> resolveII s <*> resolveSystem ts <*> resolveExp t
+  Cap r s ts t -> CTT.Cap <$> resolveII r <*> resolveII s <*> resolveSystem ts <*> resolveExp t
   V r a b e -> CTT.V <$> resolveII r <*> resolveExp a <*> resolveExp b <*> resolveExp e
   Vin r m n -> CTT.Vin <$> resolveII r <*> resolveExp m <*> resolveExp n
   Vproj r o a b e -> CTT.Vproj <$> resolveII r <*> resolveExp o <*> resolveExp a <*> resolveExp b <*> resolveExp e
