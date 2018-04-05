@@ -122,9 +122,9 @@ instance Nominal Val where
       vin <$> subst (Name j) (i,r) <*> subst m (i,r) <*> subst n (i,r)
     VVproj j o a b e               ->
       join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
-    VHComU s s' t ts   -> undefined
-    VBox s s' t ts     -> undefined
-    VCap s s' t ts     -> undefined
+    VHComU s s' ts t   -> undefined
+    VBox s s' ts t     -> undefined
+    VCap s s' ts t     -> undefined
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -158,9 +158,9 @@ instance Nominal Val where
          VV i a b e        -> VV (swapName i ij) (sw a) (sw b) (sw e)
          VVin i m n        -> VVin (swapName i ij) (sw m) (sw n)
          VVproj i o a b e  -> VVproj (swapName i ij) (sw o) (sw a) (sw b) (sw e)
-         VHComU s s' t ts  -> undefined
-         VBox s s' t ts    -> undefined
-         VCap s s' t ts    -> undefined         
+         VHComU s s' ts t  -> VHComU (sw s) (sw s') (sw ts) (sw t)
+         VBox s s' ts t    -> VBox (sw s) (sw s') (sw ts) (sw t)
+         VCap s s' ts t    -> VCap (sw s) (sw s') (sw ts) (sw t)
          -- VGlue a ts              -> VGlue (sw a) (sw ts)
          -- VGlueElem a ts          -> VGlueElem (sw a) (sw ts)
          -- VUnGlueElem a b ts      -> VUnGlueElem (sw a) (sw b) (sw ts)
@@ -993,10 +993,10 @@ instance Convertible Val where
       (VV i a b e,VV i' a' b' e')                     -> pure (i == i') <&&> conv ns (a,b,e) (a',b',e')
       (VVin _ m n,VVin _ m' n')                       -> conv ns (m,n) (m',n')
       (VVproj i o _ _ _,VVproj i' o' _ _ _)           -> pure (i == i') <&&> conv ns o o'
-      (VHComU r s t ts,VHComU r' s' t' ts')           -> conv ns (r,s,t,ts) (r',s',t',ts')
+      (VHComU r s ts t,VHComU r' s' ts' t')           -> conv ns (r,s,ts,t) (r',s',ts',t')
       -- TODO: are the following two cases correct?
-      (VCap r s t ts,VCap r' s' t' ts')               -> conv ns (r,s,t,ts) (r',s',t',ts')
-      (VBox r s t ts,VBox r' s' t' ts')               -> conv ns (r,s,t,ts) (r',s',t',ts')
+      (VCap r s ts t,VCap r' s' ts' t')               -> conv ns (r,s,ts,t) (r',s',ts',t')
+      (VBox r s ts t,VBox r' s' ts' t')               -> conv ns (r,s,ts,t) (r',s',ts',t')
       -- (VGlue v equivs,VGlue v' equivs')            -> conv ns (v,equivs) (v',equivs')
       -- (VGlueElem u us,VGlueElem u' us')            -> conv ns (u,us) (u',us')
       -- (VUnGlueElemU u _ _,VUnGlueElemU u' _ _)     -> conv ns u u'
@@ -1089,6 +1089,9 @@ instance Normal Val where
     VV i a b e             -> VV i <$> normal ns a <*> normal ns b <*> normal ns e
     VVin i m n             -> VVin i <$> normal ns m <*> normal ns n
     VVproj i o a b e       -> VVproj i <$> normal ns o <*> normal ns a <*> normal ns b <*> normal ns e
+    VHComU r s ts t        -> VHComU <$> normal ns r <*> normal ns s <*> normal ns ts <*> normal ns t
+    VCap r s ts t          -> VCap <$> normal ns r <*> normal ns s <*> normal ns ts <*> normal ns t
+    VBox r s ts t          -> VBox <$> normal ns r <*> normal ns s <*> normal ns ts <*> normal ns t
     -- VGlue u equivs      -> VGlue (normal ns u) (normal ns equivs)
     -- VGlueElem u us      -> VGlueElem (normal ns u) (normal ns us)
     -- VUnGlueElem v u us  -> VUnGlueElem (normal ns v) (normal ns u) (normal ns us)
