@@ -28,9 +28,6 @@ isContrPath (A : U) : isContr ((B : U) * Path U A B) =
   ((A,<_> A),\(bp : (B : U) * Path U A B) -> <i> (hcom 0->1 U [(i=0) -> bp.2,(i=1) -> <_> A ] A
                                                  ,<j> hcom 0->j U [(i=0) -> bp.2,(i=1) -> <_> A ] A))
 
--- hcom U is not implemented yet
-opaque isContrPath
-
 retIsContr (A B : U) (f : A -> B) (g : B -> A)
            (h : (x : A) -> Path A (g (f x)) x) (v : isContr B) : isContr A = (g b,p)
   where

@@ -750,12 +750,21 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
                       ,(s~>0,sndVal rtm)]
   ptms <- ptm `subst` (j,s)
   vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
-
+vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
-
 vhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
-vhcom (VV i a b e) r s us u = undefined
+vhcom (VV i a b e) r s (Sys us) u = do
+  j <- fresh
+  otm <- hcom r (Name j) a (Sys us) u
+  ti0 <- VPLam j <$> app (equivFun e) otm
+  ti1 <- VPLam j <$> hcom r (Name j) b (Sys us) u
+  let tvec = [(i~>0,ti0),(i~>1,ti1)]
+  us' <- mapSystemUnsafe (\n -> vproj (Name i) n a b e) us
+  u' <- vproj (Name i) u a b e
+  vin (Name i) <$> otm `subst` (j,s)
+               <*> hcom r s b (insertsSystem tvec (Sys us')) u'
+vhcom _ _ _ _ _ = error "vhcom: case not implemented"
 
 -------------------------------------------------------------------------------
 -- | Universe
@@ -779,10 +788,10 @@ hcomU r s (Triv u) _    = u @@ s
 hcomU r s ts t          = return $ VHComU r s ts t
 
 coeHComU :: Val -> II -> II -> Val -> Eval Val
-coeHComU (VPLam i (VHComU s s' ts t)) r r' u = undefined
+coeHComU (VPLam i (VHComU s s' ts t)) r r' u = error "coeHComU not implemented"
 
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
-hcomHComU (VHComU s s' ts t) r r' us u = undefined
+hcomHComU (VHComU s s' ts t) r r' us u = error "hcomHComU not implemented"
 
 
 -------------------------------------------------------------------------------
