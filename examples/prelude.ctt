@@ -39,6 +39,15 @@ transK (A B : U) (p : Path U A B) (a : A) :
   Path A a (transNeg A B p (trans A B p a)) =
   <i> coe i->0 p (coe 0->i p a)
 
+-- This does not work
+-- transNegK (A B : U) (p : Path U A B) (b : B) :
+--   Path B b (coe 0->1 p (coe 1->0 p b)) =
+--     <i> coe 0->i p (coe i->0 p b)
+
+transNegK (A B : U) (p : Path U A B) (b : B) :
+  Path B (coe 0->1 p (coe 1->0 p b)) b =
+    <i> coe i->1 p (coe 1->i p b)
+
 -- subst can be defined using trans:
 substTrans (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
   trans (P a) (P b) (<i> P (p @ i)) e
@@ -49,7 +58,7 @@ subst (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
 
 substEq (A : U) (P : A -> U) (a : A) (e : P a) :
   Path (P a) e (subst A P a a (<_> a) e) = <i> coe 0->i (<_> P a) e
-  
+
 compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
   <i> hcom 0->1 A [ (i=0) -> <j> a, (i=1) -> q ] (p @ i)
 
@@ -62,7 +71,7 @@ singl (A : U) (a : A) : U = (x : A) * Path A a x
 -- The connection p @ i /\ j.
 -- Inspired by: https://github.com/RedPRL/sml-redprl/blob/master/example/connection.prl
 connAnd (A : U) (a b : A) (p : Path A a b) :
-  PathP (<i> Path A a (p @ i)) (<_> a) p = 
+  PathP (<i> Path A a (p @ i)) (<_> a) p =
   <i j> hcom 0->1 A [ (i=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
                     , (i=1) -> <k> hcom 1->j A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
                     , (j=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
@@ -273,7 +282,7 @@ propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
 --          (q y).2
 --     in (p2 (q0,q1) @ i,
 --        \(w : fiber A B f y) ->
---           let sq : PathP (<j> Path (fiber A B f y) (p2 (q0,q1) @ j) w) (p2 w) (q2 w) = 
+--           let sq : PathP (<j> Path (fiber A B f y) (p2 (q0,q1) @ j) w) (p2 w) (q2 w) =
 --                      <i j> comp (<_> fiber A B f y) (p2 w @ i \/ j)
 --                                  [ (i = 0) -> <k> p2 w @ j
 --                                  , (i = 1) -> <k> q2 w @ j \/ -k
