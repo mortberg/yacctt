@@ -122,7 +122,7 @@ instance Nominal Val where
       vin <$> subst (Name j) (i,r) <*> subst m (i,r) <*> subst n (i,r)
     VVproj j o a b e               ->
       join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
-    VHComU s s' ts t   -> undefined
+    VHComU s s' ts t   -> join $ hcomU <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
     VBox s s' ts t     -> box <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
     VCap s s' ts t     -> join $ cap <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
@@ -183,7 +183,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Fst a                 -> fstVal <$> eval rho a
   Snd a                 -> sndVal <$> eval rho a
   Where t decls         -> eval (defWhere decls rho) t
-  Con name ts           -> VCon <$> pure name <*> mapM (eval rho) ts
+  Con name ts           -> VCon name <$> mapM (eval rho) ts
   PCon name a ts phis   ->
     join $ pcon name <$> eval rho a <*> mapM (eval rho) ts <*> pure (map (evalII rho) phis)
   Lam{}                 -> return $ Ter v rho
@@ -201,12 +201,12 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
     join $ hcom (evalII rho r) (evalII rho s) <$> eval rho a <*> evalSystem rho us <*> eval rho u0
   Coe r s a t           -> join $ coe (evalII rho r) (evalII rho s) <$> eval rho a <*> eval rho t
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
-  V r a b e             -> vtype <$> pure (evalII rho r) <*> eval rho a <*> eval rho b <*> eval rho e
-  Vin r m n             -> vin <$> pure (evalII rho r) <*> eval rho m <*> eval rho n
+  V r a b e             -> vtype (evalII rho r) <$> eval rho a <*> eval rho b <*> eval rho e
+  Vin r m n             -> vin (evalII rho r) <$> eval rho m <*> eval rho n
   Vproj r o a b e       ->
     join $ vproj (evalII rho r) <$> eval rho o <*> eval rho a <*> eval rho b <*> eval rho e
-  Box r s t ts          -> undefined
-  Cap r s t ts          -> undefined
+  Box r s ts t          -> box (evalII rho r) (evalII rho s) <$> evalSystem rho ts <*> eval rho t
+  Cap r s ts t          -> join $ cap (evalII rho r) (evalII rho s) <$> evalSystem rho ts <*> eval rho t
   -- Glue a ts          -> glue (eval rho a) (evalSystem rho ts)
   -- GlueElem a ts      -> glueElem (eval rho a) (evalSystem rho ts)
   -- UnGlueElem v a ts  -> unGlue (eval rho v) (eval rho a) (evalSystem rho ts)
@@ -369,7 +369,9 @@ hcom r s a (Sys us) u0   = case a of
         u1hcom = VHCom r s a us1 u1
     bj <- VPLam j <$> app b u1fill
     VPair u1hcom <$> com r s bj us2 u2
-  VU -> return $ VHComU r s (Sys us) u0
+  VU -> hcomU r s (Sys us) u0
+  v@VV{} -> vhcom v r s (Sys us) u0
+  v@VHComU{} -> hcomHComU v r s (Sys us) u0
   -- Ter (Sum _ n nass) env
   --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
@@ -405,30 +407,30 @@ hcom r s a (Sys us) u0   = case a of
 --                     u1comp = hComp i a u1 us1
 --                 in VPair u1comp (comp i (app f u1fill) u2 us2)
 --   VU -> hCompUniv u (Map.map (VPLam i) us)
---   -- VGlue b equivs -> -- | not (isNeutralGlueHComp equivs u us) ->
---   --   let wts = mapWithKey (\al wal ->
---   --                 app (equivFun wal)
---   --                   (hFill i (equivDom wal) (u `face` al) (us `face` al)))
---   --               equivs
---   --       t1s = mapWithKey (\al wal ->
---   --               hComp i (equivDom wal) (u `face` al) (us `face` al)) equivs
---   --       v = unGlue u b equivs
---   --       vs = mapWithKey (\al ual -> unGlue ual (b `face` al) (equivs `face` al))
---   --              us
---   --       v1 = hComp i b v (vs `unionSystem` wts)
---   --   in glueElem v1 t1s
---   -- VHCompU b es -> -- | not (isNeutralGlueHComp es u us) ->
---   --   let wts = mapWithKey (\al eal ->
---   --                 eqFun eal
---   --                   (hFill i (eal @@ One) (u `face` al) (us `face` al)))
---   --               es
---   --       t1s = mapWithKey (\al eal ->
---   --               hComp i (eal @@ One) (u `face` al) (us `face` al)) es
---   --       v = unGlueU u b es
---   --       vs = mapWithKey (\al ual -> unGlueU ual (b `face` al) (es `face` al))
---   --              us
---   --       v1 = hComp i b v (vs `unionSystem` wts)
---   --   in glueElem v1 t1s
+-- VGlue b equivs -> -- | not (isNeutralGlueHComp equivs u us) ->
+--   let wts = mapWithKey (\al wal ->
+--                 app (equivFun wal)
+--                   (hFill i (equivDom wal) (u `face` al) (us `face` al)))
+--               equivs
+--       t1s = mapWithKey (\al wal ->
+--               hComp i (equivDom wal) (u `face` al) (us `face` al)) equivs
+--       v = unGlue u b equivs
+--       vs = mapWithKey (\al ual -> unGlue ual (b `face` al) (equivs `face` al))
+--              us
+--       v1 = hComp i b v (vs `unionSystem` wts)
+--   in glueElem v1 t1s
+-- VHCompU b es -> -- | not (isNeutralGlueHComp es u us) ->
+--   let wts = mapWithKey (\al eal ->
+--                 eqFun eal
+--                   (hFill i (eal @@ One) (u `face` al) (us `face` al)))
+--               es
+--       t1s = mapWithKey (\al eal ->
+--               hComp i (eal @@ One) (u `face` al) (us `face` al)) es
+--       v = unGlueU u b es
+--       vs = mapWithKey (\al ual -> unGlueU ual (b `face` al) (es `face` al))
+--              us
+--       v1 = hComp i b v (vs `unionSystem` wts)
+--   in glueElem v1 t1s
 --   Ter (Sum _ _ nass) env | VCon n vs <- u, all isCon (elems us) ->
 --     case lookupLabel n nass of
 --       Just as -> let usvs = transposeSystemAndList (Map.map unCon us) vs
@@ -512,7 +514,8 @@ coe r s (VPLam i a) u = case a of
     return $ VPair (VCoe r s (VPLam i a) u1) (VCoe r s (VPLam j bij) u2)
   VPi{} -> return $ VCoe r s (VPLam i a) u
   VU -> return u
-  v@(VV j a b e) -> vvcoe (VPLam i v) r s u
+  v@VHComU{} -> coeHComU (VPLam i v) r s u
+  v@VV{} -> vvcoe (VPLam i v) r s u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> return u -- hardcode hack
     | otherwise -> error "coe sum"
@@ -523,75 +526,6 @@ coe r s (VPLam i a) u = case a of
   _ -> -- error "missing case in coe" --
        return $ VCoe r s (VPLam i a) u
 coe r s a u = return $ VCoe r s a u
-
-
--- TODO
--- In Part 3: i corresponds to y, and, j to x
-vvcoe :: Val -> II -> II -> Val -> Eval Val
-vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
-  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
-  vj1 <- coe r (Name i) (VPLam i b) u
-  let tvec = mkSystem [(j~>0,vj0),(j~>1,vj1)]
-  (ar,br,er) <- (a,b,e) `subst` (i,r)
-  vr <- vproj (Name j) u ar br er
-  vin (Name j) <$> coe r s (VPLam i a) u
-               <*> com r s (VPLam i b) tvec vr
-
-vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
-  ej0 <- equivFun e `subst` (j,0)
-  return $ vin s u $ VCoe 0 s (VPLam j b) (VApp ej0 u)
-
-vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
-  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
-                              <*> coe 1 s (VPLam j b) u)
-  u' <- coe 1 s (VPLam j b) u
-  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u)]
-  ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
-                         <*> pure psys
-                         <*> pure u'
-  return $ vin s (fstVal otm) ptm
-
-vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
-  -- i = y
-  -- j = x
-  -- k = w
-  -- l = z
-  k <- fresh
-  l <- fresh
-  let (ak,bk,ek) = (a,b,e) `swap` (j,k)
-      u' eps = VCoe eps (Name k) vty u
-      otm eps = VVproj k (u' eps) ak bk ek
-  let o0 = otm 0
-  let o1 = otm 1
-  let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
-  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
-  ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
-                 <$> vproj (Name i) u ai bi ei
-  p0 <- ptm `subst` (j,0)
-  (a0,b0,e0) <- (a,b,e) `subst` (j,0)
-  let uvec eps t = do
-        e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
-        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
-      qtm eps t = do
-        let t' = VCoe eps (Name i) (VPLam i a0) t
-        p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
-        return $ VPair t' (VPLam l p0')
-  e0p02 <- sndVal <$> app (equivContr e0) p0
-  u0 <- u `subst` (i,0)
-  e0p02q <- join $ app e0p02 <$> qtm 0 u0
-  foo <- coe 1 0 vty u
-  foo1 <- foo `subst` (i,1)
-  q1 <- qtm 1 foo1
-  rtm' <- app e0p02q q1
-  rtm <- rtm' @@ i
-  (as,bs,es) <- (a,b,e) `subst` (j,s)
-  (o0s,o1s) <- (o0,o1) `subst` (k,s)
-  let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
-                      ,(i~>1,VPLam (N "_") o1s)
-                      ,(i~>s,VPLam (N "_") $ VVproj i u as bs es)
-                      ,(s~>0,sndVal rtm)]
-  ptms <- ptm `subst` (j,s)
-  vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
 
 
 -- Transport and forward
@@ -731,22 +665,97 @@ equivContr = sndVal
 
 vtype :: II -> Val -> Val -> Val -> Val
 vtype (Dir Zero) a _ _ = a
-vtype (Dir One) _ b _ = b
-vtype (Name i) a b e = VV i a b e
+vtype (Dir One) _ b _  = b
+vtype (Name i) a b e   = VV i a b e
 
 vin :: II -> Val -> Val -> Val
 vin (Dir Zero) m _ = m
-vin (Dir One) _ n = n
+vin (Dir One) _ n  = n
 -- vin r m (VVproj s o _ _) | r == s = o -- TODO?
-vin (Name i) m n = VVin i m n
+vin (Name i) m n   = VVin i m n
 
 vproj :: II -> Val -> Val -> Val -> Val -> Eval Val
 vproj (Dir Zero) o _ _ e = app (equivFun e) o
-vproj (Dir One) o _ _ _ = return o
+vproj (Dir One) o _ _ _  = return o
 vproj (Name i) x@(VVin j m n) _ _ _ | i == j = return n
                                     | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
 vproj (Name i) o a b e = return $ VVproj i o a b e
 
+
+-- Coe for V-types
+
+-- In Part 3: i corresponds to y, and, j to x
+vvcoe :: Val -> II -> II -> Val -> Eval Val
+vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
+  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
+  vj1 <- coe r (Name i) (VPLam i b) u
+  let tvec = mkSystem [(j~>0,vj0),(j~>1,vj1)]
+  (ar,br,er) <- (a,b,e) `subst` (i,r)
+  vr <- vproj (Name j) u ar br er
+  vin (Name j) <$> coe r s (VPLam i a) u
+               <*> com r s (VPLam i b) tvec vr
+
+vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
+  ej0 <- equivFun e `subst` (j,0)
+  return $ vin s u $ VCoe 0 s (VPLam j b) (VApp ej0 u)
+
+vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
+  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
+                              <*> coe 1 s (VPLam j b) u)
+  u' <- coe 1 s (VPLam j b) u
+  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u)]
+  ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
+                         <*> pure psys
+                         <*> pure u'
+  return $ vin s (fstVal otm) ptm
+
+vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
+  -- i = y
+  -- j = x
+  -- k = w
+  -- l = z
+  k <- fresh
+  l <- fresh
+  let (ak,bk,ek) = (a,b,e) `swap` (j,k)
+      u' eps = VCoe eps (Name k) vty u
+      otm eps = VVproj k (u' eps) ak bk ek
+  let o0 = otm 0
+  let o1 = otm 1
+  let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
+  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
+  ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
+                 <$> vproj (Name i) u ai bi ei
+  p0 <- ptm `subst` (j,0)
+  (a0,b0,e0) <- (a,b,e) `subst` (j,0)
+  let uvec eps t = do
+        e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
+        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
+      qtm eps t = do
+        let t' = VCoe eps (Name i) (VPLam i a0) t
+        p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
+        return $ VPair t' (VPLam l p0')
+  e0p02 <- sndVal <$> app (equivContr e0) p0
+  u0 <- u `subst` (i,0)
+  e0p02q <- join $ app e0p02 <$> qtm 0 u0
+  foo <- coe 1 0 vty u
+  foo1 <- foo `subst` (i,1)
+  q1 <- qtm 1 foo1
+  rtm' <- app e0p02q q1
+  rtm <- rtm' @@ i
+  (as,bs,es) <- (a,b,e) `subst` (j,s)
+  (o0s,o1s) <- (o0,o1) `subst` (k,s)
+  let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
+                      ,(i~>1,VPLam (N "_") o1s)
+                      ,(i~>s,VPLam (N "_") $ VVproj i u as bs es)
+                      ,(s~>0,sndVal rtm)]
+  ptms <- ptm `subst` (j,s)
+  vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
+
+
+-- hcom for V-types
+
+vhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
+vhcom (VV i a b e) r s us u = undefined
 
 -------------------------------------------------------------------------------
 -- | Universe
@@ -764,8 +773,16 @@ cap r s (Triv b) t   = coe s r b t -- TODO: eta expand b?
 cap r s _ (VBox r' s' _ t) | r == r' && s == s' = return t
 cap r s ts t = return $ VCap r s ts t
 
+hcomU :: II -> II -> System Val -> Val -> Eval Val
+hcomU r s _ u0 | r == s = return u0
+hcomU r s (Triv u) _    = u @@ s
+hcomU r s ts t          = return $ VHComU r s ts t
 
+coeHComU :: Val -> II -> II -> Val -> Eval Val
+coeHComU (VPLam i (VHComU s s' ts t)) r r' u = undefined
 
+hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
+hcomHComU (VHComU s s' ts t) r r' us u = undefined
 
 
 -------------------------------------------------------------------------------
