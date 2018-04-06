@@ -788,10 +788,47 @@ hcomU r s (Triv u) _    = u @@ s
 hcomU r s ts t          = return $ VHComU r s ts t
 
 coeHComU :: Val -> II -> II -> Val -> Eval Val
-coeHComU (VPLam i (VHComU s s' ts t)) r r' u = error "coeHComU not implemented"
+coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = do
+  -- k = z
+  k <- fresh
+  -- Define N_i. Parametrize by B_i instead of just i
+  let ntm bi = do
+        bi' <- bi `subst` (k,s')
+        m' <- coe r (Name i) (VPLam i bi') m
+        coe s' (Name k) (VPLam k bi) m'
+  -- Define O
+  otm <- do
+    osys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
+    ocap <- cap s s' (Sys bs) m
+    o' <- hcom s' (Name k) a osys ocap
+    o' `subst` (i,r)
+  sr <- s `subst` (i,r)
+  -- Define P
+  ptm <- do
+    otm' <- otm `subst` (k,sr)
+    -- TODO: filter out things from bs
+    psys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (k,s)) bs
+    m' <- coe r (Name i) (VPLam i a) m
+    -- TODO: check that i doesn't occur in s
+    let psys = insertSystem (eqn (s,s'),VPLam i m') (Sys psys')
+    com r r' (VPLam i a) psys otm'
+  sr' <- s `subst` (i,r')
+  -- Define Q_k. Parametrize by B_k instead of just k
+  let qtm bk = do
+        bk' <- bk `subst` (i,r')
+        -- TODO: filter out things from bs
+        qsys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (i,r')) bs
+        ntmbk <- ntm bk
+        let qsys = insertSystem (eqn (r,r'),VPLam k ntmbk) (Sys qsys')
+        com sr' (Name k) (VPLam k bk') qsys ptm
+  outtmsys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs
+  outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otm) outtmsys) ptm
+  outsys <- Sys <$> mapSystemUnsafe (\bi -> qtm bi >>= flip subst (k,s')) bs
+  box s s' outsys outtm `subst` (i,r')
+coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
-hcomHComU (VHComU s s' ts t) r r' us u = error "hcomHComU not implemented"
+hcomHComU (VHComU s s' bs a) r r' us m = error "hcomHComU not implemented"
 
 
 -------------------------------------------------------------------------------
