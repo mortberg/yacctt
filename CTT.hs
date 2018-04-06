@@ -403,7 +403,7 @@ showTer v = case v of
   Box r s ts t ->
     text "box" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showTer1 t
   Cap r s ts t ->
-    text "cap" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showTer1 t
+    text "cap" <+> showII r <> text "<-" <> showII s <+> text (show ts) <+> showTer1 t
   -- Glue a ts         -> text "Glue" <+> showTer1 a <+> text (show ts)
   -- GlueElem a ts     -> text "glue" <+> showTer1 a <+> text (show ts)
   -- UnGlueElem a b ts -> text "unglue" <+> showTers [a,b] <+> text (show ts)
@@ -469,7 +469,7 @@ showVal v = case v of
   VBox r s ts t          ->
     text "box" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
   VCap r s ts t          ->
-    text "cap" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
+    text "cap" <+> showII r <> text "<-" <> showII s <+> text (show ts) <+> showVal1 t
   VHComU r s ts t       ->
     text "hcomp U" <+> showII r <> text "->" <> showII s <+> text (show ts) <+> showVal1 t
   -- VGlue a ts          -> text "Glue" <+> showVal1 a <+> text (show ts)
