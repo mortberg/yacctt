@@ -123,8 +123,8 @@ instance Nominal Val where
     VVproj j o a b e               ->
       join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
     VHComU s s' ts t   -> undefined
-    VBox s s' ts t     -> undefined
-    VCap s s' ts t     -> undefined
+    VBox s s' ts t     -> box <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
+    VCap s s' ts t     -> join $ cap <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
          -- VUnGlueElem a bb ts      -> unGlue (subst a (i,r)) (subst bb (i,r)) (subst ts (i,r))
@@ -709,6 +709,8 @@ pcon c a us phi     = return $ VPCon c a us phi
 -------------------------------------------------------------------------------
 -- | V-types
 
+-- TODO: eta for V-types?
+
 -- RedPRL style equiv between A and B:
 -- f : A -> B
 -- p : (x : B) -> isContr ((y : A) * Path B (f y) x)
@@ -744,6 +746,26 @@ vproj (Dir One) o _ _ _ = return o
 vproj (Name i) x@(VVin j m n) _ _ _ | i == j = return n
                                     | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
 vproj (Name i) o a b e = return $ VVproj i o a b e
+
+
+-------------------------------------------------------------------------------
+-- | Universe
+
+-- TODO: eta for box/cap?
+
+box :: II -> II -> System Val -> Val -> Val
+box r s _ t | r == s = t
+box _ _ (Triv t) _   = t
+box r s ts t         = VBox r s ts t
+
+cap :: II -> II -> System Val -> Val -> Eval Val
+cap r s _ t | r == s = return t
+cap r s (Triv b) t   = coe s r b t -- TODO: eta expand b?
+cap r s _ (VBox r' s' _ t) | r == r' && s == s' = return t
+cap r s ts t = return $ VCap r s ts t
+
+
+
 
 
 -------------------------------------------------------------------------------
