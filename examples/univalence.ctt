@@ -51,4 +51,3 @@ univalence (A : U) : isContr ((B : U) * equiv A B) =
   retIsContr ((B : U) * equiv A B) ((B : U) * Path U A B)
      (f1 A) (f2 A) (uaretsig A) (isContrPath A)
 
-

@@ -689,9 +689,9 @@ vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
   vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
   vj1 <- coe r (Name i) (VPLam i b) u
-  let tvec = mkSystem [(j~>0,vj0),(j~>1,vj1)]
+  let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
   (ar,br,er) <- (a,b,e) `subst` (i,r)
-  vr <- vproj (Name j) u ar br er
+  let vr = VVproj j u ar br er
   vin (Name j) <$> coe r s (VPLam i a) u
                <*> com r s (VPLam i b) tvec vr
 
@@ -754,14 +754,14 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
 vhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
-vhcom (VV i a b e) r s (Sys us) u = do
+vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
   j <- fresh
-  otm <- hcom r (Name j) a (Sys us) u
-  ti0 <- VPLam j <$> app (equivFun e) otm
-  ti1 <- VPLam j <$> hcom r (Name j) b (Sys us) u
+  let otm = VHCom r (Name j) a (Sys us) u
+  ti0 <- VPLam j <$> app (equivFun e) otm -- x can occur in e and a!
+  let ti1 = VPLam j $ VHCom r (Name j) b (Sys us) u -- x and occur in b!
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystemUnsafe (\n -> vproj (Name i) n a b e) us
-  u' <- vproj (Name i) u a b e
+  us' <- mapSystemUnsafe (\n -> return $ VPLam j (VVproj i n a b e)) us
+  let u' = VVproj i u a b e
   vin (Name i) <$> otm `subst` (j,s)
                <*> hcom r s b (insertsSystem tvec (Sys us')) u'
 vhcom _ _ _ _ _ = error "vhcom: case not implemented"
@@ -778,7 +778,9 @@ box r s ts t         = VBox r s ts t
 
 cap :: II -> II -> System Val -> Val -> Eval Val
 cap r s _ t | r == s = return t
-cap r s (Triv b) t   = coe s r b t -- TODO: eta expand b?
+cap r s (Triv b) t   = -- coe s r b t -- TODO: eta expand b?
+  do y <- fresh
+     coe s r (VPLam y b) t
 cap r s _ (VBox r' s' _ t) | r == r' && s == s' = return t
 cap r s ts t = return $ VCap r s ts t
 
@@ -788,7 +790,7 @@ hcomU r s (Triv u) _    = u @@ s
 hcomU r s ts t          = return $ VHComU r s ts t
 
 coeHComU :: Val -> II -> II -> Val -> Eval Val
-coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = do
+coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- k = z
   k <- fresh
   -- Define N_i. Parametrize by B_i instead of just i
@@ -798,33 +800,38 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = do
         coe s' (Name k) (VPLam k bi) m'
   -- Define O
   otm <- do
+    -- VPLam in system?
     osys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
     ocap <- cap s s' (Sys bs) m
     o' <- hcom s' (Name k) a osys ocap
     o' `subst` (i,r)
-  sr <- s `subst` (i,r)
   -- Define P
   ptm <- do
+    sr <- s `subst` (i,r)
     otm' <- otm `subst` (k,sr)
-    -- TODO: filter out things from bs
-    psys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (k,s)) bs
+    -- VPLam in system?
+    psys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (k,s)) $
+               Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
     m' <- coe r (Name i) (VPLam i a) m
-    -- TODO: check that i doesn't occur in s
-    let psys = insertSystem (eqn (s,s'),VPLam i m') (Sys psys')
+    let psys = if Name i /= s && Name i /= s'
+                  then insertSystem (eqn (s,s'),VPLam i m') (Sys psys')
+                  else Sys psys'
     com r r' (VPLam i a) psys otm'
-  sr' <- s `subst` (i,r')
   -- Define Q_k. Parametrize by B_k instead of just k
   let qtm bk = do
         bk' <- bk `subst` (i,r')
-        -- TODO: filter out things from bs
-        qsys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (i,r')) bs
+        -- VPLam in system?
+        qsys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (i,r')) $
+                   Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
         ntmbk <- ntm bk
-        let qsys = insertSystem (eqn (r,r'),VPLam k ntmbk) (Sys qsys')
+        ntmbk' <- ntmbk `subst` (i,r')
+        let qsys = insertSystem (eqn (r,r'),VPLam k ntmbk') (Sys qsys')
+        sr' <- s `subst` (i,r')
         com sr' (Name k) (VPLam k bk') qsys ptm
-  outtmsys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs
+  outtmsys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs -- VPLam in system?
   outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otm) outtmsys) ptm
   outsys <- Sys <$> mapSystemUnsafe (\bi -> qtm bi >>= flip subst (k,s')) bs
-  box s s' outsys outtm `subst` (i,r')
+  (box s s' outsys outtm) `subst` (i,r')
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
