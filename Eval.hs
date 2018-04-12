@@ -693,7 +693,7 @@ vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
   vj1 <- coe r (Name i) (VPLam i b) u
   let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
   (ar,br,er) <- (a,b,e) `subst` (i,r)
-  let vr = VVproj j u ar br er
+  vr <- vproj (Name j) u ar br er
   vin (Name j) <$> coe r s (VPLam i a) u
                <*> com r s (VPLam i b) tvec vr
 
@@ -702,6 +702,7 @@ vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
   ej0u <- app ej0 u
   vin s u <$> coe 0 s (VPLam j b) ej0u
 
+-- TODO: take faces everywhere!
 vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
                               <*> coe 1 s (VPLam j b) u)
@@ -712,6 +713,7 @@ vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
                          <*> pure u'
   return $ vin s (fstVal otm) ptm
 
+-- TODO: take faces everywhere!
 vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
   -- i = y
   -- j = x
@@ -759,12 +761,17 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 vhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
 vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
   j <- fresh
-  let otm = VHCom r (Name j) a (Sys us) u
-  ti0 <- VPLam j <$> app (equivFun e) otm -- x can occur in e and a!
-  let ti1 = VPLam j $ VHCom r (Name j) b (Sys us) u -- x and occur in b!
+  otm <- hcom r (Name j) a (Sys us) u
+  ti0 <- do
+    e0 <- equivFun e `subst` (i,0)  -- i can occur in e
+    otm0 <- otm `subst` (i,0) -- i can occur in a
+    VPLam j <$> app e0 otm0
+  ti1 <- do
+    b0 <- b `subst` (i,0)  -- i can occur in b
+    VPLam j <$> hcom r (Name j) b0 (Sys us) u
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystemUnsafe (\n -> return $ VPLam j (VVproj i n a b e)) us
-  let u' = VVproj i u a b e
+  us' <- mapSystemUnsafe (\n -> VPLam j <$> vproj (Name i) n a b e) us
+  u' <- vproj (Name i) u a b e
   vin (Name i) <$> otm `subst` (j,s)
                <*> hcom r s b (insertsSystem tvec (Sys us')) u'
 vhcom _ _ _ _ _ = error "vhcom: case not implemented"
@@ -792,6 +799,7 @@ hcomU r s _ u0 | r == s = return u0
 hcomU r s (Triv u) _    = u @@ s
 hcomU r s ts t          = return $ VHComU r s ts t
 
+-- TODO: take faces everywhere!
 coeHComU :: Val -> II -> II -> Val -> Eval Val
 coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- k = z
@@ -837,6 +845,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   (box s s' outsys outtm) `subst` (i,r')
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
+-- TODO: take faces everywhere!
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
 hcomHComU (VHComU s s' bs a) r r' us m = error "hcomHComU not implemented"
 
