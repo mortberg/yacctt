@@ -1,5 +1,6 @@
 module bool where
 
+import univalence
 import hedberg
 
 data bool = false | true
