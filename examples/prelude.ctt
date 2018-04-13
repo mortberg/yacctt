@@ -353,6 +353,52 @@ propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
 -- npropIsEquivConn (A B : U) (f : A -> B) : prop (isEquiv A B f) =
 --   \(u0 u1 : isEquiv A B f) -> undefined
 
+
+iso (A B : U) : U = (f : A -> B) * (g : B -> A)
+                  * (_ : (b : B) -> Path B (f (g b)) b)
+                  * ((a : A) -> Path A (g (f a)) a)
+                  
+
+lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
+  Path (fiber A B i.1 b) f0 f1 =
+  let f : A -> B = i.1
+      g : B -> A = i.2.1
+      fg : (b : B) -> Path B (f (g b)) b = i.2.2.1
+      gf : (a : A) -> Path A (g (f a)) a = i.2.2.2
+      x0 : A = f0.1
+      p0 : Path B (f x0) b = f0.2
+      x1 : A = f1.1
+      p1 : Path B (f x1) b = f1.2
+
+      l0 : Path A x0 (g b) =
+        <i> hcom 0->1 A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+      sq0 : PathP (<i> Path A (g (p0 @ i)) (l0 @ i)) (gf x0) (<_> g b) =
+        <i j> hcom 0->j A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+
+      l1 : Path A x1 (g b) =
+        <i> hcom 0->1 A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+      sq1 : PathP (<i> Path A (g (p1 @ i)) (l1 @ i)) (gf x1) (<_> g b) =
+        <i j> hcom 0->j A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+
+      l2 : Path A x0 x1 = <i> hcom 1->0 A [(i=0) -> l0, (i=1) -> l1] (g b)
+      sq2 : PathP (<i> Path A (l2 @ i) (g b)) l0 l1 =
+        <i j> hcom 1->j A [(i=0) -> l0, (i=1) -> l1] (g b)
+  in <i> (l2 @ i
+         ,<j> hcom 0->1 B [(i=0) -> fg (p0 @ j)
+                          ,(i=1) -> fg (p1 @ j)
+                          ,(j=0) -> fg (f (l2 @ i))
+                          ,(j=1) -> fg b]
+                          (f (hcom 1->0 A [(i=0) -> sq0 @ j
+                                          ,(i=1) -> sq1 @ j
+                                          ,(j=0) -> gf (l2 @ i)
+                                          ,(j=1) -> <_> g b]
+                                          (sq2 @ i @ j))))
+
+isoToEquiv (A B : U) (i : iso A B) : equiv A B =
+  (i.1,\(b : B) -> ((i.2.1 b,i.2.2.1 b),\(fib : fiber A B i.1 b) ->
+  lemIso A B i b fib (i.2.1 b,i.2.2.1 b)))
+
+
 ---
 
 data N0 =
