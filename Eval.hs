@@ -702,15 +702,17 @@ vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
   ej0u <- app ej0 u
   vin s u <$> coe 0 s (VPLam j b) ej0u
 
--- TODO: take faces everywhere!
 vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
-  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
-                              <*> coe 1 s (VPLam j b) u)
+  -- TODO: can we share this with otm?
+  otm0 <- fstVal <$> join (app <$> equivContr e `subst` (j,0)
+                               <*> coe 1 0 (VPLam j b) u)
+  let psys = mkSystem [(s~>0,sndVal otm0),(s~>1,VPLam (N "_") u)]
   u' <- coe 1 s (VPLam j b) u
-  let psys = mkSystem [(s~>0,sndVal otm),(s~>1,VPLam (N "_") u)]
   ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
                          <*> pure psys
                          <*> pure u'
+  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
+                              <*> coe 1 s (VPLam j b) u)
   return $ vin s (fstVal otm) ptm
 
 -- TODO: take faces everywhere!
