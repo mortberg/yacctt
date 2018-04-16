@@ -715,8 +715,7 @@ vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
                               <*> coe 1 s (VPLam j b) u)
   return $ vin s (fstVal otm) ptm
 
--- TODO: take faces everywhere!
-vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
+vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = trace "vvcoe i->s" $ do
   -- i = y
   -- j = x
   -- k = w
@@ -724,36 +723,42 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s u = trace "vvcoe i->s" $ do
   k <- fresh
   l <- fresh
   let (ak,bk,ek) = (a,b,e) `swap` (j,k)
-      u' eps = VCoe eps (Name k) vty u
-      otm eps = VVproj k (u' eps) ak bk ek
-  let o0 = otm 0
-  let o1 = otm 1
+  m0 <- m `subst` (i,0)
+  m1 <- m `subst` (i,1)
+
+  -- Define O_0 and O_1 separately (O_eps is only used under i=eps)
+  o0 <- do m0' <- coe 0 (Name k) vty m0 -- do we need subst (i,0) on vty as well?
+           vproj (Name k) m0' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
+  o1 <- do m1' <- coe 1 (Name k) vty m1 -- do we need subst (i,1) on vty as well?
+           vproj (Name k) m1' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
+
   let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
   (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
   ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
-                 <$> vproj (Name i) u ai bi ei
+                 <$> vproj (Name i) m ai bi ei
   p0 <- ptm `subst` (j,0)
   (a0,b0,e0) <- (a,b,e) `subst` (j,0)
   let uvec eps t = do
         e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
         return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
       qtm eps t = do
-        let t' = VCoe eps (Name i) (VPLam i a0) t
+        t' <- coe eps (Name i) (VPLam i a0) t -- Do we need to take any more faces here? (used to be VCoe)
         p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
         return $ VPair t' (VPLam l p0')
   e0p02 <- sndVal <$> app (equivContr e0) p0
-  u0 <- u `subst` (i,0)
-  e0p02q <- join $ app e0p02 <$> qtm 0 u0
-  foo <- coe 1 0 vty u
+
+  e0p02q <- join $ app e0p02 <$> qtm 0 m0
+  foo <- coe 1 0 vty m
   foo1 <- foo `subst` (i,1)
   q1 <- qtm 1 foo1
   rtm' <- app e0p02q q1
   rtm <- rtm' @@ i
   (as,bs,es) <- (a,b,e) `subst` (j,s)
   (o0s,o1s) <- (o0,o1) `subst` (k,s)
+  m' <- vproj (Name i) m as bs es -- Can m depend on i? This is used in the i=s case below
   let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
                       ,(i~>1,VPLam (N "_") o1s)
-                      ,(i~>s,VPLam (N "_") $ VVproj i u as bs es)
+                      ,(i~>s,VPLam (N "_") m')
                       ,(s~>0,sndVal rtm)]
   ptms <- ptm `subst` (j,s)
   vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
