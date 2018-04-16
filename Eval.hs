@@ -849,7 +849,36 @@ coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 -- TODO: take faces everywhere!
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
-hcomHComU (VHComU s s' bs a) r r' us m = error "hcomHComU not implemented"
+hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = do
+  -- j = y
+  j <- fresh
+  -- k = z
+  k <- fresh
+  let ptm bi = do
+        psys <- Sys <$> mapSystemUnsafe (\ni -> VPLam j <$> coe s' (Name k) (VPLam k bi) ni) us
+        pcap <- coe s' (Name k) (VPLam k bi) m
+        hcom r r' bi psys pcap
+  let ftm c = do
+        fsys <- Sys <$> mapSystem (\k' bi -> do c' <- coe s' (Name k') (VPLam k bi) c
+                                                coe (Name k') s (VPLam k bi) c') bs -- VPLam in system?
+        fcap <- cap s s' (Sys bs) c
+        hcom s' (Name k) a fsys fcap
+  otm <- do
+    osys <- Sys <$> mapSystemUnsafe (\ni -> VPLam j <$> (ftm ni >>= flip subst (k,s))) us
+    ocap <- ftm m >>= flip subst (k,s)
+    hcom r r' a osys ocap
+  qtm <- do
+    -- TODO: add a primitive for combining systems?
+    qsys1 <- Map.toList <$> mapSystemUnsafe (\ni -> do ni' <- ni `subst` (j,r')
+                                                       VPLam k <$> ftm ni') us
+    qsys2 <- Sys <$> mapSystem (\k bi -> do p' <- ptm bi
+                                            VPLam k <$> coe (Name k) s (VPLam k bi) p') bs
+    m' <- ftm m
+    let qsys = insertSystem (eqn (r,r'),VPLam k m') $ insertsSystem qsys1 qsys2
+    hcom s s' a qsys otm
+  outsys <- Sys <$> mapSystemUnsafe (\bi -> ptm bi >>= flip subst (k,s')) bs
+  return $ box s s' outsys qtm
+hcomHComU _ _ _ _ _ = error "hcomHComU: case not implemented"
 
 
 -------------------------------------------------------------------------------
