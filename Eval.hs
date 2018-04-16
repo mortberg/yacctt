@@ -688,31 +688,31 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Val -> II -> II -> Val -> Eval Val
-vvcoe (VPLam i (VV j a b e)) r s u | i /= j = trace "vvcoe i != j" $ do
-  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) u
-  vj1 <- coe r (Name i) (VPLam i b) u
-  let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
+vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
+  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) m
+  vj1 <- coe r (Name i) (VPLam i b) m
+  let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)] -- TODO: do we have to take more faces?
   (ar,br,er) <- (a,b,e) `subst` (i,r)
-  vr <- vproj (Name j) u ar br er
-  vin (Name j) <$> coe r s (VPLam i a) u
+  vr <- vproj (Name j) m ar br er
+  vin (Name j) <$> coe r s (VPLam i a) m
                <*> com r s (VPLam i b) tvec vr
 
-vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s u = trace "vvcoe 0->s" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s m = trace "vvcoe 0->s" $ do
   ej0 <- equivFun e `subst` (j,0)
-  ej0u <- app ej0 u
-  vin s u <$> coe 0 s (VPLam j b) ej0u
+  ej0m <- app ej0 m
+  vin s m <$> coe 0 s (VPLam j b) ej0m
 
-vvcoe (VPLam _ (VV j a b e)) (Dir One) s u = trace "vvcoe 1->s" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = trace "vvcoe 1->s" $ do
   -- TODO: can we share this with otm?
   otm0 <- fstVal <$> join (app <$> equivContr e `subst` (j,0)
-                               <*> coe 1 0 (VPLam j b) u)
-  let psys = mkSystem [(s~>0,sndVal otm0),(s~>1,VPLam (N "_") u)]
-  u' <- coe 1 s (VPLam j b) u
+                               <*> coe 1 0 (VPLam j b) m)
+  let psys = mkSystem [(s~>0,sndVal otm0),(s~>1,VPLam (N "_") m)]
+  m' <- coe 1 s (VPLam j b) m
   ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
                          <*> pure psys
-                         <*> pure u'
+                         <*> pure m'
   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
-                              <*> coe 1 s (VPLam j b) u)
+                              <*> coe 1 s (VPLam j b) m)
   return $ vin s (fstVal otm) ptm
 
 vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = trace "vvcoe i->s" $ do
@@ -740,7 +740,7 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = trace "vvcoe i->s" $ do
   (a0,b0,e0) <- (a,b,e) `subst` (j,0)
   let uvec eps t = do
         e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
-        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)]
+        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)] -- Do we have to take more faces?
       qtm eps t = do
         t' <- coe eps (Name i) (VPLam i a0) t -- Do we need to take any more faces here? (used to be VCoe)
         p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
@@ -759,7 +759,7 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = trace "vvcoe i->s" $ do
   let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
                       ,(i~>1,VPLam (N "_") o1s)
                       ,(i~>s,VPLam (N "_") m')
-                      ,(s~>0,sndVal rtm)]
+                      ,(s~>0,sndVal rtm)] -- can s occur in rtm?
   ptms <- ptm `subst` (j,s)
   vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
 vvcoe _ _ _ _ = error "vvcoe: case not implemented"
