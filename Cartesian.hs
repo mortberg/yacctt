@@ -301,6 +301,9 @@ toSubst :: Eqn -> (Name,II)
 toSubst (Eqn (Name i) r) = (i,r)
 toSubst eqn = error $ "toSubst: encountered " ++ show eqn ++ " in system"
 
+face :: Nominal a => a -> Eqn -> Eval a
+face a f = a `subst` toSubst f
+
 -- carve a using the same shape as the system b
 border :: a -> System b -> System a
 border v (Sys xs) = Sys (Map.map (const v) xs)

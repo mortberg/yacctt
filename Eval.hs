@@ -230,7 +230,7 @@ evalSystem rho (Sys us) =
     Triv u -> Triv <$> eval rho u
     Sys sys' -> do
       xs <- sequence $ Map.mapWithKey (\eqn u ->
-                          join $ eval <$> rho `subst` toSubst eqn <*> pure u) sys'
+                          join $ eval <$> rho `face` eqn <*> pure u) sys'
       return $ Sys xs
 
 app :: Val -> Val -> Eval Val
@@ -506,7 +506,7 @@ coe r s (VPLam i a) u = case a of
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
     return $ VPLam j out
-  VSigma a b -> trace "coe sigma" $ do
+  VSigma a b -> do -- trace "coe sigma" $ do
     j <- fresh
     let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
@@ -1072,9 +1072,9 @@ isCompSystem ns (Sys us) =
                  | (alpha,beta) <- allCompatible (Map.keys us) ]
   where
   getFace a b = do
-    usa <- us Map.! a `subst` toSubst a
-    ba <- b `subst` toSubst a
-    usa `subst` toSubst ba
+    usa <- us Map.! a `face` a
+    ba <- b `face` a
+    usa `face` ba
   -- getFace a@(Eqn (Name i) (Name j)) (Eqn (Name k) (Dir d))
   --   | i == k || j == k = us ! a `subst` (i,Dir d) `subst` (j,Dir d)
   -- getFace a@(Eqn (Name k) (Dir d)) (Eqn (Name i) (Name j))
@@ -1193,7 +1193,7 @@ instance Convertible a => Convertible [a] where
 instance (Convertible a,Nominal a) => Convertible (System a) where
   conv ns (Triv u) (Triv u') = conv ns u u'
   conv ns (Sys us) (Sys us') = do
-    let compare eqn u u' = join $ conv ns <$> u `subst` toSubst eqn <*> u' `subst` toSubst eqn
+    let compare eqn u u' = join $ conv ns <$> u `face` eqn <*> u' `face` eqn
     bs <- T.sequence $ Map.elems (Map.intersectionWithKey compare us us')
     return $ Map.keys us == Map.keys us' && and bs
 
@@ -1262,7 +1262,7 @@ instance (Nominal a, Normal a) => Normal (System a) where
   normal ns (Triv u) = Triv <$> normal ns u
   normal ns (Sys us) = do
     us' <- T.sequence $
-           Map.mapWithKey (\eqn u -> join (normal ns <$> u `subst` toSubst eqn)) us
+           Map.mapWithKey (\eqn u -> join (normal ns <$> u `face` eqn)) us
     return $ Sys us'
 
 instance (Normal a,Normal b) => Normal (a,b) where

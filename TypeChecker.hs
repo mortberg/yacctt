@@ -101,9 +101,9 @@ addTele :: Tele -> TEnv -> Typing TEnv
 addTele xas lenv = foldM (flip addType) lenv xas
 
 -- Only works for equations in a system (so of shape (Name,II))
-substEnv :: Eqn -> TEnv -> Typing TEnv
-substEnv ir tenv = do
-  tenv' <- lift $ lift $ env tenv `subst` toSubst ir
+faceEnv :: Eqn -> TEnv -> Typing TEnv
+faceEnv ir tenv = do
+  tenv' <- lift $ lift $ env tenv `face` ir
   return $ tenv{env=tenv'}
 
 -------------------------------------------------------------------------------
@@ -178,7 +178,7 @@ check a t = case (a,t) of
       let iis = zip is (map Name is)
       local (addSubs iis) $ localM (addTele tele) $ do
         checkSystemWith ts $ \alpha talpha ->
-          localM (substEnv alpha) $
+          localM (faceEnv alpha) $
             -- NB: the type doesn't depend on is
             check (Ter t rho) talpha
         rho' <- asks env
@@ -238,7 +238,7 @@ check a t = case (a,t) of
   (VU,V r a b e) -> do
     checkII r
     check VU b
-    localM (substEnv (eqn (r,0))) $ do
+    localM (faceEnv (eqn (r,0))) $ do
       check VU a
       va <- evalTyping a
       vb <- evalTyping b
@@ -248,7 +248,7 @@ check a t = case (a,t) of
     unless (Name i == s) $
       throwError $ "The names " ++ show i ++ " " ++ show s ++ " do not match in Vin"
     check b n
-    localM (substEnv (eqn (s,0))) $ do
+    localM (faceEnv (eqn (s,0))) $ do
       check a m
       vm <- evalTyping m
       vn <- evalTyping n
@@ -336,7 +336,7 @@ checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make 
 --     (throwError ("Keys don't match in " ++ show ts ++ " and " ++ show us))
 --   rho <- asks env
 --   checkSystemsWith ts us
---     (\alpha vt u -> local (substEnv alpha) $ check (equivDom vt) u)
+--     (\alpha vt u -> local (faceEnv alpha) $ check (equivDom vt) u)
 --   let vus = evalSystem rho us
 --   checkSystemsWith ts vus (\alpha vt vAlpha ->
 --     unlessM (app (equivFun vt) vAlpha === (vu `subst` alpha)) $
@@ -351,7 +351,7 @@ checkSystemWith (Triv u) f = f (eqn (0,0)) u >> return () -- TODO: Does it make 
 --     (throwError ("Keys don't match in " ++ show ves ++ " and " ++ show us))
 --   rho <- asks env
 --   checkSystemsWith ves us
---     (\alpha ve u -> local (substEnv alpha) $ check (ve @@ One) u)
+--     (\alpha ve u -> local (faceEnv alpha) $ check (ve @@ One) u)
 --   let vus = evalSystem rho us
 --   checkSystemsWith ves vus (\alpha ve vAlpha ->
 --     unlessM (eqFun ve vAlpha === (vu `subst` alpha)) $
@@ -494,9 +494,9 @@ checkPLam v t = do
 checkPLamSystem :: II -> Ter -> Val -> System Ter -> Typing ()
 checkPLamSystem r u0 va (Sys us) = do
   T.sequence $ Map.mapWithKey (\eqn u ->
-    localM (substEnv eqn) $ do
+    localM (faceEnv eqn) $ do
       rhoeqn <- asks env
-      va' <- lift $ lift $ va `subst` toSubst eqn
+      va' <- lift $ lift $ va `face` eqn
       checkPLam va' u
       vu <- evalTC rhoeqn u
       vur <- vu @@@ evalII rhoeqn r
