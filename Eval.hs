@@ -679,8 +679,9 @@ vin (Name i) m n   = VVin i m n
 vproj :: II -> Val -> Val -> Val -> Val -> Eval Val
 vproj (Dir Zero) o _ _ e = app (equivFun e) o
 vproj (Dir One) o _ _ _  = return o
-vproj (Name i) x@(VVin j m n) _ _ _ | i == j = return n
-                                    | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
+vproj (Name i) x@(VVin j m n) _ _ _
+  | i == j = return n
+  | otherwise = error $ "vproj: " ++ show i ++ " and " ++ show x
 vproj (Name i) o a b e = return $ VVproj i o a b e
 
 
@@ -689,9 +690,15 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
-  vj0 <- join $ app (equivFun e) <$> coe r (Name i) (VPLam i a) m
-  vj1 <- coe r (Name i) (VPLam i b) m
-  let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)] -- TODO: do we have to take more faces?
+  -- Are all of these faces necessary:
+  ej0 <- equivFun e `subst` (j,0)
+  aj0 <- a `subst` (j,0)
+  mj0 <- m `subst` (j,0)
+  vj0 <- join $ app ej0 <$> coe r (Name i) (VPLam i aj0) mj0
+  bj1 <- b `subst` (j,1)
+  mj1 <- m `subst` (j,1)  
+  vj1 <- coe r (Name i) (VPLam i bj1) mj1
+  let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
   (ar,br,er) <- (a,b,e) `subst` (i,r)
   vr <- vproj (Name j) m ar br er
   vin (Name j) <$> coe r s (VPLam i a) m
