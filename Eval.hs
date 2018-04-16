@@ -777,7 +777,7 @@ vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
     b0 <- b `subst` (i,0)  -- i can occur in b
     VPLam j <$> hcom r (Name j) b0 (Sys us) u
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystemUnsafe (\n -> VPLam j <$> vproj (Name i) n a b e) us
+  us' <- mapSystemUnsafe (\n -> vproj (Name i) n a b e) us
   u' <- vproj (Name i) u a b e
   vin (Name i) <$> otm `subst` (j,s)
                <*> hcom r s b (insertsSystem tvec (Sys us')) u'
@@ -818,7 +818,6 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
         coe s' (Name k) (VPLam k bi) m'
   -- Define O
   otm <- do
-    -- VPLam in system?
     osys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
     ocap <- cap s s' (Sys bs) m
     o' <- hcom s' (Name k) a osys ocap
@@ -827,7 +826,6 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   ptm <- do
     sr <- s `subst` (i,r)
     otm' <- otm `subst` (k,sr)
-    -- VPLam in system?
     psys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (k,s)) $
                Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
     m' <- coe r (Name i) (VPLam i a) m
@@ -838,7 +836,6 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- Define Q_k. Parametrize by B_k instead of just k
   let qtm bk = do
         bk' <- bk `subst` (i,r')
-        -- VPLam in system?
         qsys' <- mapSystemUnsafe (\bi -> ntm bi >>= flip subst (i,r')) $
                    Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
         ntmbk <- ntm bk
@@ -846,7 +843,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
         let qsys = insertSystem (eqn (r,r'),VPLam k ntmbk') (Sys qsys')
         sr' <- s `subst` (i,r')
         com sr' (Name k) (VPLam k bk') qsys ptm
-  outtmsys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs -- VPLam in system?
+  outtmsys <- Sys <$> mapSystem (\k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs
   outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otm) outtmsys) ptm
   outsys <- Sys <$> mapSystemUnsafe (\bi -> qtm bi >>= flip subst (k,s')) bs
   (box s s' outsys outtm) `subst` (i,r')
@@ -860,24 +857,24 @@ hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = do
   -- k = z
   k <- fresh
   let ptm bi = do
-        psys <- Sys <$> mapSystemUnsafe (\ni -> VPLam j <$> coe s' (Name k) (VPLam k bi) ni) us
+        psys <- Sys <$> mapSystemUnsafe (\ni -> coe s' (Name k) (VPLam k bi) ni) us
         pcap <- coe s' (Name k) (VPLam k bi) m
         hcom r r' bi psys pcap
   let ftm c = do
         fsys <- Sys <$> mapSystem (\k' bi -> do c' <- coe s' (Name k') (VPLam k bi) c
-                                                coe (Name k') s (VPLam k bi) c') bs -- VPLam in system?
+                                                coe (Name k') s (VPLam k bi) c') bs
         fcap <- cap s s' (Sys bs) c
         hcom s' (Name k) a fsys fcap
   otm <- do
-    osys <- Sys <$> mapSystemUnsafe (\ni -> VPLam j <$> (ftm ni >>= flip subst (k,s))) us
+    osys <- Sys <$> mapSystemUnsafe (\ni -> ftm ni >>= flip subst (k,s)) us
     ocap <- ftm m >>= flip subst (k,s)
     hcom r r' a osys ocap
   qtm <- do
     -- TODO: add a primitive for combining systems?
     qsys1 <- Map.toList <$> mapSystemUnsafe (\ni -> do ni' <- ni `subst` (j,r')
-                                                       VPLam k <$> ftm ni') us
+                                                       ftm ni') us
     qsys2 <- Sys <$> mapSystem (\k bi -> do p' <- ptm bi
-                                            VPLam k <$> coe (Name k) s (VPLam k bi) p') bs
+                                            coe (Name k) s (VPLam k bi) p') bs
     m' <- ftm m
     let qsys = insertSystem (eqn (r,r'),VPLam k m') $ insertsSystem qsys1 qsys2
     hcom s s' a qsys otm
