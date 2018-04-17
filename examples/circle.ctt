@@ -30,6 +30,7 @@ compS1 : loopS1 -> loopS1 -> loopS1 = compPath S1 base base base
 
 -- All of these should be equal to "posZ (suc zero)":
 loop2 : loopS1 = compS1 loop1 loop1
+nloop2 : Z = winding loop2
 -- loop2' : loopS1 = compPath' S1 base base base loop1 loop1
 -- loop2'' : loopS1 = compPath'' S1 base base loop1 base loop1
 
