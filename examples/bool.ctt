@@ -62,8 +62,8 @@ contr (b : bool) (x y : fiber bool bool negBool b) : Path (fiber bool bool negBo
         y2 : Path bool (negBool y1) b = y.2
         goal1 : Path bool x1 y1 =
           injNegBool x1 y1 (<i> hcom 1->0 bool [(i=0) -> x2, (i=1) -> y2] b)
-        goal2 : PathP (<i> Path bool (negBool (goal1 @ i)) b) x2 y2 =
-          gengoal bool setbool b (negBool x1) x2 (negBool y1) (<i> negBool (goal1 @ i)) y2
+        goal2 : PathP (<i> Path bool (negBool (goal1 @ i)) b) x2 y2 = undefined
+          -- gengoal bool setbool b (negBool x1) x2 (negBool y1) (<i> negBool (goal1 @ i)) y2
     in <i> (goal1 @ i,goal2 @ i)
 
 negBoolEquivInhProp : equivInhProp bool bool =

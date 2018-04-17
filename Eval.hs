@@ -382,12 +382,14 @@ hcom r s a (Sys us) u0   = case a of
   VU -> hcomU r s (Sys us) u0
   v@VV{} -> vhcom v r s (Sys us) u0
   v@VHComU{} -> hcomHComU v r s (Sys us) u0
-  -- Ter (Sum _ n nass) env
-  --   | n `elem` ["nat","Z","bool"] -> u0 -- hardcode hack
-  -- Ter (Sum _ _ nass) env | VCon n vs <- u0, all isCon (elems us) -> error "hcom sum"
-  -- Ter (HSum _ _ _) _ -> VHCom r s a (Sys us) u0
+  Ter (Sum _ n nass) env
+    | n `elem` ["nat","Z","bool"] -> return u0 -- hardcode hack
+  -- Ter (Sum _ _ nass) env -- | VCon n vs <- u0, all isCon (elems us)
+  --                        -> error "hcom sum"
+  -- Ter (HSum _ _ _) _ -> error "hcom hsum" -- return $ VHCom r s a (Sys us) u0
   VPi{} -> return $ VHCom r s a (Sys us) u0
-  _ -> return $ VHCom r s a (Sys us) u0
+  _ -> -- error "hcom: undefined case"
+       return $ VHCom r s a (Sys us) u0
 
 
 -------------------------------------------------------------------------------
@@ -784,17 +786,16 @@ vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
   j <- fresh
   otm <- hcom r (Name j) a (Sys us) u
   ti0 <- do
-    e0 <- equivFun e `subst` (i,0)  -- i can occur in e
-    otm0 <- otm `subst` (i,0) -- i can occur in a
+    (e0,otm0) <- (equivFun e,otm) `subst` (i,0)  -- i can occur in e and a
     VPLam j <$> app e0 otm0
   ti1 <- do
-    b0 <- b `subst` (i,0)  -- i can occur in b
-    VPLam j <$> hcom r (Name j) b0 (Sys us) u
+    b1 <- b `subst` (i,1)  -- i can occur in b
+    VPLam j <$> hcom r (Name j) b1 (Sys us) u
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystemUnsafe (\alpha n -> do (a',b',e') <- (a,b,e) `face` alpha
-                                         vproj (Name i) n a' b' e') us
+  us' <- mapSystem (\alpha _ n -> do (n',a',b',e') <- (n,a,b,e) `face` alpha
+                                     vproj (Name i) n' a' b' e') us
   u' <- vproj (Name i) u a b e
-  vin (Name i) <$> otm `subst` (j,s)
+  vin (Name i) <$> hcom r s a (Sys us) u
                <*> hcom r s b (insertsSystem tvec (Sys us')) u'
 vhcom _ _ _ _ _ = error "vhcom: case not implemented"
 
