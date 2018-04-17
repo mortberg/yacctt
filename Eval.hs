@@ -270,8 +270,8 @@ app u v = case (u,v) of
     bijw <- VPLam j <$> app bij w
     coe r s bijw =<< app u0 w0
   (VHCom r s (VPi a b) (Sys us) u0, v) -> trace "hcom pi" $ do
-    us' <- mapSystem (\_ _ u -> app u v) us
-    join $ hcom r s <$> app b v <*> pure (Sys us') <*> app u0 v
+    us' <- Sys <$> mapSystem (\alpha _ u -> app u =<< (v `face` alpha)) us
+    join $ hcom r s <$> app b v <*> pure us' <*> app u0 v
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
   _                     -> return $ VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
 
@@ -336,7 +336,7 @@ com :: II -> II -> Val -> System Val -> Val -> Eval Val
 com r s a _ u0 | r == s = return u0
 com _ s _ (Triv u) _  = u @@ s
 com r s a (Sys us) u0 = do
-  us' <- Sys <$> mapSystem (\_ j u -> coe (Name j) s a u) us -- TODO: don't we need to take the face of a here?
+  us' <- Sys <$> mapSystem (\alpha j u -> a `face` alpha >>= \a' -> coe (Name j) s a' u) us
   join $ hcom r s <$> a @@ s <*> pure us' <*> coe r s a u0
 
 -- apply f to each face, eta-expanding where needed, without freshening
@@ -701,12 +701,9 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
   -- Are all of these faces necessary:
-  ej0 <- equivFun e `subst` (j,0)
-  aj0 <- a `subst` (j,0)
-  mj0 <- m `subst` (j,0)
+  (ej0,aj0,mj0) <- (equivFun e,a,m) `subst` (j,0)
   vj0 <- join $ app ej0 <$> coe r (Name i) (VPLam i aj0) mj0
-  bj1 <- b `subst` (j,1)
-  mj1 <- m `subst` (j,1)  
+  (bj1,mj1) <- (b,m) `subst` (j,1)
   vj1 <- coe r (Name i) (VPLam i bj1) mj1
   let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
   (ar,br,er) <- (a,b,e) `subst` (i,r)
@@ -794,7 +791,8 @@ vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
     b0 <- b `subst` (i,0)  -- i can occur in b
     VPLam j <$> hcom r (Name j) b0 (Sys us) u
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystemUnsafe (\_ n -> vproj (Name i) n a b e) us
+  us' <- mapSystemUnsafe (\alpha n -> do (a',b',e') <- (a,b,e) `face` alpha
+                                         vproj (Name i) n a' b' e') us
   u' <- vproj (Name i) u a b e
   vin (Name i) <$> otm `subst` (j,s)
                <*> hcom r s b (insertsSystem tvec (Sys us')) u'
@@ -829,13 +827,14 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- k = z
   k <- fresh
   -- Define N_i. Parametrize by B_i instead of just i
+  -- This should take a face!
   let ntm bi = do
         bi' <- bi `subst` (k,s')
         m' <- coe r (Name i) (VPLam i bi') m
         coe s' (Name k) (VPLam k bi) m'
   -- Define O
   otm <- do
-    osys <- Sys <$> mapSystem (\_ k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
+    osys <- Sys <$> mapSystem (\alpha k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
     ocap <- cap s s' (Sys bs) m
     o' <- hcom s' (Name k) a osys ocap
     o' `subst` (i,r)
