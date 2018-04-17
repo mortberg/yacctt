@@ -242,14 +242,14 @@ app u v = case (u,v) of
   (Ter (Split _ _ _ nvs) e,VPCon c _ us phis) -> case lookupBranch c nvs of
     Just (PBranch _ xs is t) -> eval (subs (zip is phis) (upds (zip xs us) e)) t
     _ -> error $ "app: missing case in split for " ++ c
-  (Ter (Split _ _ ty hbr) e,VHCom r s a ws w) -> undefined -- case eval e ty of
+  (Ter (Split _ _ ty hbr) e,VHCom r s a ws w) -> case eval e ty of
     -- VPi _ f -> let j   = fresh (e,v)
     --                wsj = Map.map (@@ j) ws
     --                w'  = app u w
     --                ws' = mapWithKey (\alpha -> app (u `face` alpha)) wsj
     --                -- a should be constant
     --            in comp j (app f (hFill j a w wsj)) w' ws'
-    -- _ -> error $ "app: Split annotation not a Pi type " ++ show u
+    _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
                     -> return (VSplit u v)
   (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $ do

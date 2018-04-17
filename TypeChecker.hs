@@ -449,7 +449,7 @@ checkBranch (PLabel _ tele is ts,nu) f (PBranch c ns js e) g va = do
   let vus  = map snd us
       js'  = map Name js
   vts <- lift $ lift $ evalSystem (subs (zip is js') (upds us nu)) ts
-  let vgts = undefined -- intersectionWith app (border g vts) vts
+  vgts <- lift $ lift $ runSystem $ intersectWith app (border g vts) vts
   local (addSubs (zip js js') . addBranch (zip ns vus) nu) $ do
     f' <- appTC f (VPCon c va vus js')
     check f' e

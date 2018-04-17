@@ -312,6 +312,17 @@ border v (Triv _) = Triv v
 shape :: System a -> System ()
 shape = border ()
 
+intersectWith :: (a -> b -> c) -> System a -> System b -> System c
+intersectWith f (Triv x) (Triv y) = Triv (f x y)
+intersectWith f (Sys xs) (Sys ys) = Sys (Map.intersectionWith f xs ys)
+intersectWith _ _ _ = error "intersectWith not matching input"
+
+runSystem :: System (Eval a) -> Eval (System a)
+runSystem (Triv x) = Triv <$> x
+runSystem (Sys xs) = do
+  xs' <- T.sequence xs
+  return $ Sys xs'
+
 -- TODO: optimize so that we don't apply the face everywhere before computing this
 -- assumes alpha <= shape us
 -- proj :: (Nominal a, Show a) => System a -> (Name,II) -> a

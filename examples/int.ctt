@@ -1,5 +1,6 @@
 module int where
 
+import univalence
 import hedberg
 
 data nat = zero | suc (n : nat)
@@ -9,6 +10,8 @@ pred : nat -> nat = split
   suc n -> n
 
 data Z = pos (n : nat) | neg (n : nat)
+
+zeroZ : Z = pos zero
 
 predZ : Z -> Z = split
   pos u -> auxpredZ u
@@ -118,14 +121,14 @@ gengoal (A : U) (hA : set A) (x y : A) (p : Path A y x) : (z : A) (r : Path A y 
   J A y (\(z : A) (r : Path A y z) -> (q : Path A z x) -> PathP (<i> Path A (r @ i) x) p q)
    (hA y x p)
 
-contr (y : Z) (y' : fiber Z Z sucZ y) : Path (fiber Z Z sucZ y) y' (ctr y) =
-  let p1 : Path Z y'.1 (predZ y) =
-        <i> hcom 0->1 Z [(i=0) -> predsucZ y'.1,(i=1) -> <j> predZ (y'.2 @ j)] (predZ (sucZ y'.1))
-      prf1 : Path Z (sucZ y'.1) (sucZ (predZ y)) = <i> sucZ (p1 @ i)
-      prf2 : Path Z (sucZ (predZ y)) y = sucpredZ y
-      p2 : PathP (<i> Path Z (prf1 @ i) y) y'.2 prf2 =
-          gengoal Z ZSet y (sucZ y'.1) y'.2 (sucZ (predZ y)) prf1 prf2
-  in <i> (p1 @ i,p2 @ i)
+contr (y : Z) (y' : fiber Z Z sucZ y) : Path (fiber Z Z sucZ y) y' (ctr y) = undefined
+  -- let p1 : Path Z y'.1 (predZ y) = 
+  --       <i> hcom 0->1 Z [(i=0) -> predsucZ y'.1,(i=1) -> <j> predZ (y'.2 @ j)] (predZ (sucZ y'.1))
+  --     prf1 : Path Z (sucZ y'.1) (sucZ (predZ y)) = <i> sucZ (p1 @ i)
+  --     prf2 : Path Z (sucZ (predZ y)) y = sucpredZ y
+  --     p2 : PathP (<i> Path Z (prf1 @ i) y) y'.2 prf2 =
+  --         gengoal Z ZSet y (sucZ y'.1) y'.2 (sucZ (predZ y)) prf1 prf2
+  -- in <i> (p1 @ i,p2 @ i)
 
 equivSucZ : equiv Z Z = (sucZ,\(y : Z) -> (ctr y,contr y))
 
