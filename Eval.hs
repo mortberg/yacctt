@@ -826,44 +826,91 @@ coeHComU :: Val -> II -> II -> Val -> Eval Val
 coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- k = z
   k <- fresh
+
   -- Define N_i. Parametrize by B_i instead of just i
   -- This should take a face!
   let ntm bi = do
         bi' <- bi `subst` (k,s')
         m' <- coe r (Name i) (VPLam i bi') m
         coe s' (Name k) (VPLam k bi) m'
+        
   -- Define O
-  otm <- do
-    osys <- Sys <$> mapSystem (\alpha k bi -> coe (Name k) s (VPLam k bi) =<< ntm bi) bs
-    ocap <- cap s s' (Sys bs) m
-    o' <- hcom s' (Name k) a osys ocap
-    o' `subst` (i,r)
+  let otm z = do
+        -- Here I do not use ntm like in Part 3. Instead I unfold it so
+        -- that I can take appropriate faces and do some optimization.
+        -- z is the name bound in bi.
+        osys <- Sys <$> mapSystem (\alpha z' bi -> do
+                                      (bia,sa,sa',ma) <- (bi,s,s',m) `face` alpha
+                                      -- NB: this is not needed because we substitute r for i later!
+                                      -- bia' <- bia `subst` (z',sa')
+                                      -- ma' <- coe ra (Name i) (VPLam i bia') ma
+                                      ma' <- coe sa' (Name z') bia ma
+                                      coe (Name z') sa bia ma') bs
+        ocap <- cap s s' (Sys bs) m
+        o' <- hcom s' z a osys ocap
+        o' `subst` (i,r)
+
   -- Define P
   ptm <- do
-    sr <- s `subst` (i,r)
-    otm' <- otm `subst` (k,sr)
-    psys' <- mapSystemUnsafe (\_ bi -> ntm bi >>= flip subst (k,s)) $
-               Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
-    m' <- coe r (Name i) (VPLam i a) m
-    let psys = if Name i /= s && Name i /= s'
-                  then insertSystem (eqn (s,s'),VPLam i m') (Sys psys')
-                  else Sys psys'
-    com r r' (VPLam i a) psys otm'
+    otmsr <- otm =<< (s `subst` (i,r))
+    let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
+    psys <- mapSystem (\alpha x bi -> do
+                                (bia,sa,sa',ra,ma) <- (bi,s,s',r,m) `face` alpha
+                                bia' <- bia @@ sa'
+                                ma' <- coe ra (Name x) (VPLam i bia') ma
+                                coe sa' sa bia ma') bs'
+
+    psys' <- if Name i `notElem` [s,s'] && isConsistent (eqn (s,s'))
+                then do (rs,as,ms) <- (r,a,m) `face` (eqn (s,s'))
+                        m' <- coe rs (Name i) (VPLam i as) ms
+                        return $ insertSystem (eqn (s,s'),VPLam i m') (Sys psys)
+                else return $ Sys psys
+    com r r' (VPLam i a) psys' otmsr
+
   -- Define Q_k. Parametrize by B_k instead of just k
-  let qtm bk = do
-        bk' <- bk `subst` (i,r')
-        qsys' <- mapSystemUnsafe (\_ bi -> ntm bi >>= flip subst (i,r')) $
-                   Map.filterWithKey (\(Eqn s s') _ -> Name i /= s && Name i /= s') bs
-        ntmbk <- ntm bk
-        ntmbk' <- ntmbk `subst` (i,r')
-        let qsys = insertSystem (eqn (r,r'),VPLam k ntmbk') (Sys qsys')
-        sr' <- s `subst` (i,r')
-        com sr' (Name k) (VPLam k bk') qsys ptm
-  outtmsys <- Sys <$> mapSystem (\_ k bi -> coe (Name k) s (VPLam k bi) =<< qtm bi) bs
-  outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otm) outtmsys) ptm
-  outsys <- Sys <$> mapSystemUnsafe (\_ bi -> qtm bi >>= flip subst (k,s')) bs
+  let qtm z bk = do
+        -- TODO: share bs' with ptm
+        let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
+        qsys <- mapSystem (\alpha z' bi -> do
+                              (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha
+                              bia' <- bia @@ sa'
+                              ma' <- coe ra ra' (VPLam i bia') ma
+                              coe sa' (Name z') bia ma') bs'
+
+        qsys' <- if isConsistent (eqn (r,r'))
+                    then do (sr',bkr,mr) <- (s',bk,m) `face` (eqn (r,r'))
+                            m' <- coe sr' z bkr mr
+                            return $ insertSystem (eqn (r,r'),m') (Sys qsys) -- Do we need to abstract m'?
+                    else return $ Sys qsys
+        
+        (bk',sr') <- (bk,s) `subst` (i,r')
+        com sr' z (VPLam k bk') qsys' ptm -- I think the VPLam k is wrong, but if I don't have it the computation crashes...
+
+  -- TODO: it is not necessary to always use qtm here, we should split the
+  -- system into two parts (with i # (s,s') in one) and only use qtm in one
+  -- We should also take the face into account in qtm
+  outtmsys <- Sys <$> mapSystem (\_ z bi -> coe (Name z) s bi =<< qtm (Name z) bi) bs
+    
+  -- TODO: we should take the equation r=r' into account in otmk...
+  otmk <- otm (Name k)
+  outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otmk) outtmsys) ptm
+
+  -- TODO: it is not necessary to always use qtm here, we should split the
+  -- system into two parts (with i # (s,s') in one) and only use qtm in one
+  -- We should also take the face into account in qtm
+  outsys <- Sys <$> mapSystemUnsafe (\_ bi -> qtm s' bi) bs
   (box s s' outsys outtm) `subst` (i,r')
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
+
+-- mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+-- mapSystem f us = do
+--   j <- fresh
+--   let etaMap e (VPLam i u) = VPLam j <$> f e j (u `swap` (i,j))
+--       etaMap e u = do
+--         uj <- u @@ j
+--         VPLam j <$> f e j uj
+--   T.sequence $ Map.mapWithKey etaMap us
+
 
 -- TODO: take faces everywhere!
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val

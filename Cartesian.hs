@@ -99,6 +99,11 @@ data Eqn = Eqn II II
 eqn :: (II,II) -> Eqn
 eqn (r,s) = Eqn (max r s) (min r s)
 
+isConsistent :: Eqn -> Bool
+isConsistent (Eqn (Dir Zero) (Dir One)) = False -- This is not necessary
+isConsistent (Eqn (Dir One) (Dir Zero)) = False
+isConsistent _ = True
+
 instance Show Eqn where
   show (Eqn r s) = "(" ++ show r ++ " = " ++ show s ++ ")"
 
