@@ -822,7 +822,6 @@ hcomU r s _ u0 | r == s = return u0
 hcomU r s (Triv u) _    = u @@ s
 hcomU r s ts t          = return $ VHComU r s ts t
 
--- TODO: take faces everywhere!
 coeHComU :: Val -> II -> II -> Val -> Eval Val
 coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- k = z
@@ -874,8 +873,8 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- Define Q_k. Parametrize by B_k instead of just k
   let qtm z bk = do
-        qsys <- mapSystem (\alpha z' bi -> do
-                              (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha
+        qsys <- mapSystem (\alpha' z' bi -> do
+                              (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha'
                               bia' <- bia @@ sa'
                               ma' <- coe ra ra' (VPLam i bia') ma
                               coe sa' (Name z') bia ma') bs'
@@ -891,8 +890,10 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- The part of outtmsys where the faces of the system depend on i
   -- (i.e. where we have to use qtm as the system doesn't simplify).
-  -- TODO: take the face into account in qtm
-  outtmsysi <- Sys <$> mapSystem (\_ z bi -> coe (Name z) s bi =<< qtm (Name z) bi) bsi
+  -- TODO: can we take the face into account likes this?
+  outtmsysi <- Sys <$> mapSystem (\alpha z bi -> do
+                                     t' <- coe (Name z) s bi =<< qtm (Name z) bi
+                                     t' `face` alpha) bsi
   -- The part of outtmsys where the faces of the system doesn't depend on i
   -- (i.e. where qtm simplifies).
   outtmsys' <- Sys <$> mapSystem (\alpha z bi -> do
@@ -912,8 +913,9 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   outtm <- hcom s s' a outtmsysO ptm
 
   -- Like above we only use qtm when i does not occur in the faces
-  -- TODO: take face into account in q
-  outsysi <- Sys <$> mapSystemUnsafe (\_ bi -> qtm s' bi) bsi
+  -- TODO: can we take the face into account like this?
+  outsysi <- Sys <$> mapSystemUnsafe (\alpha bi -> do t' <- qtm s' bi
+                                                      t' `face` alpha) bsi
   -- And in the case when i does occur in the face we do the simplification
   outsys' <- Sys <$> mapSystemUnsafe (\alpha bi ->  do
                                          (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha
