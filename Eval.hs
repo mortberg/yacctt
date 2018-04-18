@@ -685,7 +685,7 @@ vtype (Name i) a b e   = VV i a b e
 vin :: II -> Val -> Val -> Val
 vin (Dir Zero) m _ = m
 vin (Dir One) _ n  = n
--- vin r m (VVproj s o _ _) | r == s = o -- TODO?
+-- vin (Name i) m (VVproj j o _ _ _) | i == j = o -- TODO?
 vin (Name i) m n   = VVin i m n
 
 vproj :: II -> Val -> Val -> Val -> Val -> Eval Val
