@@ -123,7 +123,7 @@ instance Nominal Val where
     VVproj j o a b e               ->
       join $ vproj <$> subst (Name j) (i,r) <*> subst o (i,r) <*> subst a (i,r) <*> subst b (i,r) <*> subst e (i,r)
     VHComU s s' ts t   -> join $ hcomU <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
-    VBox s s' ts t     -> box <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
+    VBox s s' ts t     -> join $ box <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
     VCap s s' ts t     -> join $ cap <$> subst s (i,r) <*> subst s' (i,r) <*> subst ts (i,r) <*> subst t (i,r)
          -- VGlue a ts              -> glue (subst a (i,r)) (subst ts (i,r))
          -- VGlueElem a ts          -> glueElem (subst a (i,r)) (subst ts (i,r))
@@ -205,7 +205,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Vin r m n             -> vin (evalII rho r) <$> eval rho m <*> eval rho n
   Vproj r o a b e       ->
     join $ vproj (evalII rho r) <$> eval rho o <*> eval rho a <*> eval rho b <*> eval rho e
-  Box r s ts t          -> box (evalII rho r) (evalII rho s) <$> evalSystem rho ts <*> eval rho t
+  Box r s ts t          -> join $ box (evalII rho r) (evalII rho s) <$> evalSystem rho ts <*> eval rho t
   Cap r s ts t          -> join $ cap (evalII rho r) (evalII rho s) <$> evalSystem rho ts <*> eval rho t
   -- Glue a ts          -> glue (eval rho a) (evalSystem rho ts)
   -- GlueElem a ts      -> glueElem (eval rho a) (evalSystem rho ts)
@@ -246,7 +246,7 @@ app u v = case (u,v) of
     trace "split hcom" $ eval e ty >>= \x -> case x of
     VPi _ f -> do
       j <- fresh
-      fill <- hcom r (Name j) a (Sys ws) w -- TODO: apply tube to j?
+      fill <- hcom r (Name j) a (Sys ws) w
       ffill <- VPLam j <$> app f fill
       w' <- app u w
       ws' <- Sys <$> mapSystemUnsafe (\alpha w -> do u' <- u `face` alpha
@@ -518,7 +518,7 @@ coe r s (VPLam i a) u = case a of
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
     return $ VPLam j out
-  VSigma a b -> do -- trace "coe sigma" $ do
+  VSigma a b -> trace "coe sigma" $ do
     j <- fresh
     let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
@@ -782,21 +782,21 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
 vhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
-vhcom (VV i a b e) r s (Sys us) u = trace "vhcom" $ do
+vhcom (VV i a b e) r s (Sys us) m = trace "vhcom" $ do
   j <- fresh
-  otm <- hcom r (Name j) a (Sys us) u
+  otm <- hcom r (Name j) a (Sys us) m
   ti0 <- do
     (e0,otm0) <- (equivFun e,otm) `subst` (i,0)  -- i can occur in e and a
     VPLam j <$> app e0 otm0
   ti1 <- do
     b1 <- b `subst` (i,1)  -- i can occur in b
-    VPLam j <$> hcom r (Name j) b1 (Sys us) u
+    VPLam j <$> hcom r (Name j) b1 (Sys us) m
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
   us' <- mapSystem (\alpha _ n -> do (n',a',b',e') <- (n,a,b,e) `face` alpha
                                      vproj (Name i) n' a' b' e') us
-  u' <- vproj (Name i) u a b e
-  vin (Name i) <$> hcom r s a (Sys us) u
-               <*> hcom r s b (insertsSystem tvec (Sys us')) u'
+  m' <- vproj (Name i) m a b e
+  vin (Name i) <$> hcom r s a (Sys us) m
+               <*> hcom r s b (insertsSystem tvec (Sys us')) m'
 vhcom _ _ _ _ _ = error "vhcom: case not implemented"
 
 -------------------------------------------------------------------------------
@@ -804,14 +804,15 @@ vhcom _ _ _ _ _ = error "vhcom: case not implemented"
 
 -- TODO: eta for box/cap?
 
-box :: II -> II -> System Val -> Val -> Val
-box r s _ t | r == s = t
-box _ _ (Triv t) _   = t
-box r s ts t         = VBox r s ts t
+-- This doesn't have to be monadic
+box :: II -> II -> System Val -> Val -> Eval Val
+box r s _ t | r == s = return t
+box _ s (Triv t) _   = return t -- t @@ s
+box r s ts t         = return $ VBox r s ts t
 
 cap :: II -> II -> System Val -> Val -> Eval Val
 cap r s _ t | r == s = return t
-cap r s (Triv b) t   = -- coe s r b t -- TODO: eta expand b?
+cap r s (Triv b) t   = -- coe s r b t
   do y <- fresh
      coe s r (VPLam y b) t
 cap r s _ (VBox r' s' _ t) | r == r' && s == s' = return t
@@ -886,7 +887,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
                     else return $ Sys qsys
 
         (bk',sr') <- (bk,s) `subst` (i,r')
-        com sr' z (VPLam k bk') qsys' ptm -- I think the VPLam k is wrong, but if I don't have it the computation crashes...
+        com sr' z (VPLam k bk') qsys' ptm -- TODO: I think the VPLam k is wrong, but if I don't have it the computation crashes...
 
   -- The part of outtmsys where the faces of the system depend on i
   -- (i.e. where we have to use qtm as the system doesn't simplify).
@@ -923,7 +924,10 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
                                          coe ra ra' (VPLam i bia') ma) bs'
   let outsys = mergeSystem outsysi outsys'
 
-  (box s s' outsys outtm) `subst` (i,r')
+  -- There is a bug here. Why are there VPLam's in the box system?
+  asdf <- box s s' outsys outtm
+  trace ("(i,r') = " ++ show (i,r') ++ "\n" ++ show asdf) $ asdf `subst` (i,r')
+  
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 -- mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.ap Eqn Val)
@@ -966,7 +970,7 @@ hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = do
     let qsys = insertSystem (eqn (r,r'),VPLam k m') $ insertsSystem qsys1 qsys2
     hcom s s' a qsys otm
   outsys <- Sys <$> mapSystemUnsafe (\_ bi -> ptm bi >>= flip subst (k,s')) bs
-  return $ box s s' outsys qtm
+  box s s' outsys qtm
 hcomHComU _ _ _ _ _ = error "hcomHComU: case not implemented"
 
 
