@@ -903,9 +903,13 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
                                      coe (Name z) sa bia ma'') bs'
   let outtmsys = mergeSystem outtmsysi outtmsys'
 
-  -- TODO: we should take the equation r=r' into account in otmk...
-  otmk <- otm (Name k)
-  outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otmk) outtmsys) ptm
+  outtmsysO <- if isConsistent (eqn (r,r'))
+                  then do otmk <- otm (Name k)
+                          -- TODO: can we take the eqn into account like this:
+                          otmk' <- otmk `face` (eqn (r,r'))
+                          return $ insertSystem (eqn (r,r'),VPLam k otmk') outtmsys
+                  else return outtmsys
+  outtm <- hcom s s' a outtmsysO ptm
 
   -- Like above we only use qtm when i does not occur in the faces
   -- TODO: take face into account in q
