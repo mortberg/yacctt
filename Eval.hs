@@ -830,11 +830,14 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- Define N_i. Parametrize by B_i instead of just i
   -- This should take a face!
-  let ntm bi = do
-        bi' <- bi `subst` (k,s')
-        m' <- coe r (Name i) (VPLam i bi') m
-        coe s' (Name k) (VPLam k bi) m'
-        
+  -- let ntm bi = do
+  --       bi' <- bi `subst` (k,s')
+  --       m' <- coe r (Name i) (VPLam i bi') m
+  --       coe s' (Name k) (VPLam k bi) m'
+
+  -- Get the part of bs that do not mention i in its faces
+  let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
+
   -- Define O
   let otm z = do
         -- Here I do not use ntm like in Part 3. Instead I unfold it so
@@ -854,7 +857,6 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- Define P
   ptm <- do
     otmsr <- otm =<< (s `subst` (i,r))
-    let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
     psys <- mapSystem (\alpha x bi -> do
                                 (bia,sa,sa',ra,ma) <- (bi,s,s',r,m) `face` alpha
                                 bia' <- bia @@ sa'
@@ -870,8 +872,6 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- Define Q_k. Parametrize by B_k instead of just k
   let qtm z bk = do
-        -- TODO: share bs' with ptm
-        let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
         qsys <- mapSystem (\alpha z' bi -> do
                               (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha
                               bia' <- bia @@ sa'
@@ -883,7 +883,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
                             m' <- coe sr' z bkr mr
                             return $ insertSystem (eqn (r,r'),m') (Sys qsys) -- Do we need to abstract m'?
                     else return $ Sys qsys
-        
+
         (bk',sr') <- (bk,s) `subst` (i,r')
         com sr' z (VPLam k bk') qsys' ptm -- I think the VPLam k is wrong, but if I don't have it the computation crashes...
 
@@ -891,7 +891,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- system into two parts (with i # (s,s') in one) and only use qtm in one
   -- We should also take the face into account in qtm
   outtmsys <- Sys <$> mapSystem (\_ z bi -> coe (Name z) s bi =<< qtm (Name z) bi) bs
-    
+
   -- TODO: we should take the equation r=r' into account in otmk...
   otmk <- otm (Name k)
   outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otmk) outtmsys) ptm
@@ -903,7 +903,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   (box s s' outsys outtm) `subst` (i,r')
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
--- mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+-- mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.ap Eqn Val)
 -- mapSystem f us = do
 --   j <- fresh
 --   let etaMap e (VPLam i u) = VPLam j <$> f e j (u `swap` (i,j))
