@@ -313,7 +313,10 @@ inferType v = case v of
   VCoe r s a _ -> a @@ s
   VVproj _ _ _ b _ -> return b
   VHComU _ _ _ _ -> return VU
-  VCap _ _ _ t -> return t -- TODO: is this correct?
+  VCap _ _ _ t -> inferType t >>= \t' -> case t' of
+    VHComU _ _ _ a -> return a
+    ty         -> error $ "inferType: expected VHComU type for " ++ show v
+                  ++ ", got " ++ show ty
   -- VUnGlueElem _ b _  -> b
   -- VUnGlueElemU _ b _ -> b
   _ -> error $ "inferType: not neutral " ++ show v

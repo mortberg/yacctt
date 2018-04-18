@@ -179,9 +179,9 @@ data Val = VU
          -- | VUnGlueElem Val Val (System Val)  -- unglue u A [phi -> (T,w)]
 
          -- Universe values
-         | VHComU II II (System Val) Val
-         | VBox II II (System Val) Val
-         | VCap II II (System Val) Val
+         | VHComU II II (System Val) Val -- r s bs a
+         | VBox II II (System Val) Val -- r s ns m
+         | VCap II II (System Val) Val -- r s bs m
 
            -- Neutral values:
          | VVar Ident Val
