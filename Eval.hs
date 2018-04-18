@@ -835,8 +835,10 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   --       m' <- coe r (Name i) (VPLam i bi') m
   --       coe s' (Name k) (VPLam k bi) m'
 
-  -- Get the part of bs that do not mention i in its faces
-  let bs' = Map.filterWithKey (\(Eqn s s') _ -> Name i `notElem` [s,s']) bs
+  let -- The part of bs that doesn't mention i in its faces
+      bs' = Map.filterWithKey (\(Eqn s s') _ -> i `notOccurs` (s,s')) bs
+      -- The part of bs that mentions i in its faces
+      bsi = Map.filterWithKey (\(Eqn s s') _ -> i `occurs` (s,s')) bs
 
   -- Define O
   let otm z = do
@@ -887,19 +889,34 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
         (bk',sr') <- (bk,s) `subst` (i,r')
         com sr' z (VPLam k bk') qsys' ptm -- I think the VPLam k is wrong, but if I don't have it the computation crashes...
 
-  -- TODO: it is not necessary to always use qtm here, we should split the
-  -- system into two parts (with i # (s,s') in one) and only use qtm in one
-  -- We should also take the face into account in qtm
-  outtmsys <- Sys <$> mapSystem (\_ z bi -> coe (Name z) s bi =<< qtm (Name z) bi) bs
+  -- The part of outtmsys where the faces of the system depend on i
+  -- (i.e. where we have to use qtm as the system doesn't simplify).
+  -- TODO: take the face into account in qtm
+  outtmsysi <- Sys <$> mapSystem (\_ z bi -> coe (Name z) s bi =<< qtm (Name z) bi) bsi
+  -- The part of outtmsys where the faces of the system doesn't depend on i
+  -- (i.e. where qtm simplifies).
+  outtmsys' <- Sys <$> mapSystem (\alpha z bi -> do
+                                     (bia,sa,sa',ra,ra',ma) <- (bi,s,s',r,r',m) `face` alpha
+                                     bia' <- bia @@ sa'
+                                     ma' <- coe ra ra' (VPLam i bia') ma
+                                     ma'' <- coe sa' (Name z) bia ma'
+                                     coe (Name z) sa bia ma'') bs'
+  let outtmsys = mergeSystem outtmsysi outtmsys'
 
   -- TODO: we should take the equation r=r' into account in otmk...
   otmk <- otm (Name k)
   outtm <- hcom s s' a (insertSystem (eqn (r,r'),VPLam k otmk) outtmsys) ptm
 
-  -- TODO: it is not necessary to always use qtm here, we should split the
-  -- system into two parts (with i # (s,s') in one) and only use qtm in one
-  -- We should also take the face into account in qtm
-  outsys <- Sys <$> mapSystemUnsafe (\_ bi -> qtm s' bi) bs
+  -- Like above we only use qtm when i does not occur in the faces
+  -- TODO: take face into account in q
+  outsysi <- Sys <$> mapSystemUnsafe (\_ bi -> qtm s' bi) bsi
+  -- And in the case when i does occur in the face we do the simplification
+  outsys' <- Sys <$> mapSystemUnsafe (\alpha bi ->  do
+                                         (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha
+                                         bia' <- bia @@ sa'
+                                         coe ra ra' (VPLam i bia') ma) bs'
+  let outsys = mergeSystem outsysi outsys'
+
   (box s s' outsys outtm) `subst` (i,r')
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 

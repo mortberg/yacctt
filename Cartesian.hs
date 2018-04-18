@@ -128,6 +128,9 @@ class Nominal a where
   subst   :: a -> (Name,II) -> Eval a
   swap    :: a -> (Name,Name) -> a
 
+notOccurs :: Nominal a => Name -> a -> Bool
+notOccurs i x = not (i `occurs` x)
+
 fresh :: Eval Name
 fresh = do
   n <- gen
@@ -285,9 +288,17 @@ insertsSystem xs sys = foldr insertSystem sys xs
 mkSystem :: [(Eqn,a)] -> System a
 mkSystem xs = insertsSystem xs eps
 
-allSystem :: Name -> System a -> System a
-allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn a -> occurs i eqn) xs)
-allSystem _ (Triv x) = Triv x
+mergeSystem :: System a -> System a -> System a
+mergeSystem (Sys xs) ys = Map.toList xs `insertsSystem` ys
+mergeSystem (Triv _) ys = ys
+
+-- allSystem :: Name -> System a -> System a
+-- allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn _ -> i `occurs` eqn) xs)
+-- allSystem _ (Triv x) = Triv x
+
+-- notAllSystem :: Name -> System a -> System a
+-- notAllSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn _ -> i `notOccurs` eqn) xs)
+-- notAllSystem _ (Triv x) = Triv x
 
 instance Nominal a => Nominal (System a) where
   occurs x (Sys xs) = Map.foldrWithKey fn False xs
