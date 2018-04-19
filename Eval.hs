@@ -859,7 +859,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
     otmsr <- otm =<< (s `subst` (i,r))
     psys <- mapSystem (\alpha x bi -> do
                                 (bia,sa,sa',ra,ma) <- (bi,s,s',r,m) `face` alpha
-                                bia' <- bia @@ sa'
+                                bia' <- bia `subst` (x,sa')
                                 ma' <- coe ra (Name x) (VPLam i bia') ma
                                 coe sa' sa bia ma') bs'
 
@@ -875,7 +875,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
         
         qsys <- mapSystem (\alpha' z' bi -> do
                               (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha'
-                              bia' <- bia @@ sa'
+                              bia' <- bia @@ sa' -- TODO: subst (z',sa')?
                               ma' <- coe ra ra' (VPLam i bia') ma
                               coe sa' (Name z') bia ma') bs'
 
@@ -899,7 +899,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- (i.e. where qtm simplifies).
   outtmsys' <- Sys <$> mapSystem (\alpha z bi -> do
                                      (bia,sa,sa',ra,ra',ma) <- (bi,s,s',r,r',m) `face` alpha
-                                     bia' <- bia @@ sa'
+                                     bia' <- bia `subst` (z,sa')
                                      ma' <- coe ra ra' (VPLam i bia') ma
                                      ma'' <- coe sa' (Name z) bia ma'
                                      coe (Name z) sa bia ma'') bs'
