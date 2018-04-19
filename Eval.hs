@@ -706,13 +706,13 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
   -- Are all of these faces necessary:
-  (ej0,aj0,mj0) <- (equivFun e,a,m) `subst` (j,0)
-  vj0 <- join $ app ej0 <$> coe r (Name i) (VPLam i aj0) mj0
-  (bj1,mj1) <- (b,m) `subst` (j,1)
-  vj1 <- coe r (Name i) (VPLam i bj1) mj1
+  (rj0,ej0,aj0,mj0) <- (r,equivFun e,a,m) `subst` (j,0)
+  vj0 <- join $ app ej0 <$> coe rj0 (Name i) (VPLam i aj0) mj0
+  (rj1,bj1,mj1) <- (r,b,m) `subst` (j,1)
+  vj1 <- coe rj1 (Name i) (VPLam i bj1) mj1
   let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
-  (ar,br,er) <- (a,b,e) `subst` (i,r)
-  vr <- vproj (Name j) m ar br er
+  (mr,ar,br,er) <- (m,a,b,e) `subst` (i,r)
+  vr <- vproj (Name j) mr ar br er
   vin (Name j) <$> coe r s (VPLam i a) m
                <*> com r s (VPLam i b) tvec vr
 
