@@ -28,18 +28,19 @@ winding (p : loopS1) : Z = trans Z Z rem zeroZ
 
 compS1 : loopS1 -> loopS1 -> loopS1 = compPath S1 base base base
 
--- All of these should be equal to "posZ (suc zero)":
-loop2 : loopS1 = compS1 loop1 loop1
-nloop2 : Z = winding loop2
--- loop2' : loopS1 = compPath' S1 base base base loop1 loop1
--- loop2'' : loopS1 = compPath'' S1 base base loop1 base loop1
 
--- -- More examples:
--- loopZ1  : Z = winding loop1
--- loopZ2  : Z = winding (compS1 loop1 loop1)
--- loopZ3  : Z = winding (compS1 loop1 (compS1 loop1 loop1))
--- loopZN1 : Z = winding invLoop
--- loopZ0  : Z = winding (compS1 loop1 invLoop)
+-- Examples:
+loopZ1  : Z = winding loop1
+loopZ2  : Z = winding (compS1 loop1 loop1)
+loopZ3  : Z = winding (compS1 loop1 (compS1 loop1 loop1))
+loopZN1 : Z = winding invLoop
+loopZ0  : Z = winding (compS1 loop1 invLoop)
+
+-- This works:
+loopZ4 : Z = winding (compS1 (compS1 loop1 loop1) (compS1 loop1 loop1))
+
+-- But this doesn't:
+loopZ4' : Z = winding (compS1 loop1 (compS1 loop1 (compS1 loop1 loop1)))
 
 -- mLoop : (x : S1) -> Path S1 x x = split
 --   base -> loop1
