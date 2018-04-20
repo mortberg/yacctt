@@ -840,19 +840,23 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- Define O
   let otm z = do
-        -- Here I do not use ntm like in Part 3. Instead I unfold it so
-        -- that I can take appropriate faces and do some optimization.
-        -- z is the name bound in bi.
-        osys <- Sys <$> mapSystem (\alpha z' bi -> do
-                                      (bia,sa,sa',ma) <- (bi,s,s',m) `face` alpha
-                                      -- NB: this is not needed because we substitute r for i later!
-                                      -- bia' <- bia `subst` (z',sa')
-                                      -- ma' <- coe ra (Name i) (VPLam i bia') ma
-                                      ma' <- coe sa' (Name z') bia ma
-                                      coe (Name z') sa bia ma') bs
-        ocap <- cap s s' (Sys bs) m
-        o' <- hcom s' z a osys ocap
-        o' `subst` (i,r)
+        (s,s',a,m,bs) <- (s,s',a,m,Sys bs) `subst` (i,r)
+        case bs of
+          Triv b -> do m' <- coe s' z b m
+                       coe z s b m'
+          Sys bs -> do
+            -- Here I do not use ntm like in Part 3. Instead I unfold it so
+            -- that I can take appropriate faces and do some optimization.
+            -- z is the name bound in bi.
+            osys <- Sys <$> mapSystem (\alpha z' bi -> do
+                                          (bia,sa,sa',ma) <- (bi,s,s',m) `face` alpha
+                                          -- NB: this is not needed because we substitute r for i later!
+                                          -- bia' <- bia `subst` (z',sa')
+                                          -- ma' <- coe ra (Name i) (VPLam i bia') ma
+                                          ma' <- coe sa' (Name z') bia ma
+                                          coe (Name z') sa bia ma') bs
+            ocap <- cap s s' (Sys bs) m
+            hcom s' z a osys ocap
 
   -- Define P
   ptm <- do
