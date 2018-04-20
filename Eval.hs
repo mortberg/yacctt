@@ -874,8 +874,8 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
                 else return $ Sys psys
     com r r' (VPLam i a) psys' otmsr
 
-  -- Define Q_k. Parametrize by B_k instead of just k
-  let qtm w bk = do
+  -- Define Q_k. Take the face alpha (s_i = s'_i), free variable w (called z) and bk
+  let qtm alpha w bk = do
         
         qsys <- mapSystem (\alpha' z' bi -> do
                               (bia,sa',ra,ra',ma) <- (bi,s',r,r',m) `face` alpha'
@@ -897,7 +897,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   -- (i.e. where we have to use qtm as the system doesn't simplify).
   -- TODO: can we take the face into account likes this?
   outtmsysi <- Sys <$> mapSystem (\alpha z bi -> do
-                                     t' <- coe (Name z) s bi =<< qtm (Name z) (VPLam z bi)
+                                     t' <- coe (Name z) s bi =<< qtm alpha (Name z) (VPLam z bi)
                                      t' `face` alpha) bsi
   -- The part of outtmsys where the faces of the system doesn't depend on i
   -- (i.e. where qtm simplifies).
@@ -920,7 +920,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
 
   -- Like above we only use qtm when i does not occur in the faces
   -- TODO: can we take the face into account like this?
-  outsysi <- runSystem $ Sys $ Map.mapWithKey (\alpha bi -> do t' <- qtm s' bi
+  outsysi <- runSystem $ Sys $ Map.mapWithKey (\alpha bi -> do t' <- qtm alpha s' bi
                                                                t' `face` alpha) bsi
   -- And in the case when i does occur in the face we do the simplification
   outsys' <- runSystem $ Sys $ Map.mapWithKey (\alpha bi -> do
@@ -930,7 +930,7 @@ coeHComU (VPLam i (VHComU s s' (Sys bs) a)) r r' m = trace "coe hcomU" $ do
   let outsys = mergeSystem outsysi outsys'
 
   bbox <- box s s' outsys outtm
-  bbox `subst` (i,r')
+  bbox `subst` (i,r') -- TODO: this should be inlined!
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 -- TODO: take faces everywhere!
