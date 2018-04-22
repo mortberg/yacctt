@@ -242,15 +242,15 @@ app u v = case (u,v) of
   (Ter (Split _ _ _ nvs) e,VPCon c _ us phis) -> case lookupBranch c nvs of
     Just (PBranch _ xs is t) -> eval (subs (zip is phis) (upds (zip xs us) e)) t
     _ -> error $ "app: missing case in split for " ++ c
-  (Ter (Split _ _ ty _) e,VHCom r s a (Sys ws) w) ->
+  (Ter (Split _ _ ty _) e,VHCom r s a ws w) ->
     trace "split hcom" $ eval e ty >>= \x -> case x of
     VPi _ f -> do
       j <- fresh
-      fill <- hcom r (Name j) a (Sys ws) w
+      fill <- hcom r (Name j) a ws w
       ffill <- VPLam j <$> app f fill
       w' <- app u w
-      ws' <- Sys <$> mapSystem (\alpha _ w -> do u' <- u `face` alpha
-                                                 app u' w) ws
+      ws' <- mapSystem (\alpha _ w -> do u' <- u `face` alpha
+                                         app u' w) ws
       com r s ffill ws' w'
     -- cubicaltt code:
     -- VPi _ f -> let j   = fresh (e,v)
@@ -269,8 +269,8 @@ app u v = case (u,v) of
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
     coe r s bijw =<< app u0 w0
-  (VHCom r s (VPi a b) (Sys us) u0, v) -> trace "hcom pi" $ do
-    us' <- Sys <$> mapSystem (\alpha _ u -> app u =<< (v `face` alpha)) us
+  (VHCom r s (VPi a b) us u0, v) -> trace "hcom pi" $ do
+    us' <- mapSystem (\alpha _ u -> app u =<< (v `face` alpha)) us
     join $ hcom r s <$> app b v <*> pure us' <*> app u0 v
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
   _                     -> return $ VApp u v -- error $ "app \n  " ++ show u ++ "\n  " ++ show v
@@ -338,61 +338,67 @@ v @@ phi = do
 com :: II -> II -> Val -> System Val -> Val -> Eval Val
 com r s a _ u0 | r == s = return u0
 com _ s _ (Triv u) _  = u @@ s
-com r s a (Sys us) u0 = do
-  us' <- Sys <$> mapSystem (\alpha j u -> a `face` alpha >>= \a' -> coe (Name j) s a' u) us
+com r s a us u0 = do
+  us' <- mapSystem (\alpha j u -> a `face` alpha >>= \a' -> coe (Name j) s a' u) us
   join $ hcom r s <$> a @@ s <*> pure us' <*> coe r s a u0
 
 -- apply f to each face, eta-expanding where needed, without freshening
-mapSystemUnsafe :: (Eqn -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+mapSystemUnsafe :: (Eqn -> Val -> Eval Val) -> System Val -> Eval (System Val)
 mapSystemUnsafe f us = do
   j <- fresh
   let etaMap e (VPLam i u) = VPLam i <$> f e u
       etaMap e u = do
         uj <- u @@ j
         VPLam j <$> f e uj
-  T.sequence $ Map.mapWithKey etaMap us
+  case us of
+    Sys us -> do bs <- T.sequence $ Map.mapWithKey etaMap us
+                 return (Sys bs)
+    Triv u -> Triv <$> etaMap (eqn (Name j,Name j)) u
 
 -- apply f to each face, with binder, with freshening
-mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> Map.Map Eqn Val -> Eval (Map.Map Eqn Val)
+mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
 mapSystem f us = do
   j <- fresh
   let etaMap e (VPLam i u) = VPLam j <$> f e j (u `swap` (i,j))
       etaMap e u = do
         uj <- u @@ j
         VPLam j <$> f e j uj
-  T.sequence $ Map.mapWithKey etaMap us
+  case us of
+    Sys us -> do bs <- T.sequence $ Map.mapWithKey etaMap us
+                 return (Sys bs)
+    Triv u -> Triv <$> etaMap (eqn (Name j,Name j)) u
 
 hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
 hcom r s _ _ u0 | r == s = return u0
 hcom r s _ (Triv u) _    = u @@ s
-hcom r s a (Sys us) u0   = case a of
+hcom r s a us u0   = case a of
   VPathP a v0 v1 -> trace "hcom path" $ do
     j <- fresh
     us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
-             Sys <$> mapSystemUnsafe (const (@@ j)) us
+             mapSystemUnsafe (const (@@ j)) us
     aj <- a @@ j
     u0j <- u0 @@ j
     VPLam j <$> hcom r s aj us' u0j
   VSigma a b -> trace "hcom sigma" $ do
     j <- fresh
-    us1 <- Sys <$> mapSystemUnsafe (const (return . fstVal)) us
-    us2 <- Sys <$> mapSystemUnsafe (const (return . sndVal)) us
+    us1 <- mapSystemUnsafe (const (return . fstVal)) us
+    us2 <- mapSystemUnsafe (const (return . sndVal)) us
     let (u1,u2) = (fstVal u0,sndVal u0)
     u1fill <- hcom r (Name j) a us1 u1
     u1hcom <- hcom r s a us1 u1
     bj <- VPLam j <$> app b u1fill
     VPair u1hcom <$> com r s bj us2 u2
-  VU -> hcomU r s (Sys us) u0
-  v@VV{} -> vvhcom v r s (Sys us) u0
-  v@VHComU{} -> hcomHComU v r s (Sys us) u0
+  VU -> hcomU r s us u0
+  v@VV{} -> vvhcom v r s us u0
+  v@VHComU{} -> hcomHComU v r s us u0
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> return u0 -- hardcode hack
   -- Ter (Sum _ _ nass) env -- | VCon n vs <- u0, all isCon (elems us)
   --                        -> error "hcom sum"
   -- Ter (HSum _ _ _) _ -> error "hcom hsum" -- return $ VHCom r s a (Sys us) u0
-  VPi{} -> return $ VHCom r s a (Sys us) u0
+  VPi{} -> return $ VHCom r s a us u0
   _ -> -- error "hcom: undefined case"
-       return $ VHCom r s a (Sys us) u0
+       return $ VHCom r s a us u0
 
 
 -------------------------------------------------------------------------------
@@ -787,19 +793,19 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
 vvhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
-vvhcom (VV i a b e) r s (Sys us) m = trace "vvhcom" $ do
+vvhcom (VV i a b e) r s us m = trace "vvhcom" $ do
   j <- fresh
-  let otm y = hcom r y a (Sys us) m
+  let otm y = hcom r y a us m
   ti0 <- do
     otmj <- otm (Name j)
     VPLam j <$> (VApp (equivFun e) otmj) `subst` (i,0)  -- i can occur in e and a
-  ti1 <- VPLam j <$> (VHCom r (Name j) b (Sys us) m) `subst` (i,1)
+  ti1 <- VPLam j <$> (VHCom r (Name j) b us m) `subst` (i,1)
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
   us' <- mapSystem (\alpha _ n -> do (i',n',a',b',e') <- (Name i,n,a,b,e) `face` alpha
                                      vproj i' n' a' b' e') us
   m' <- vproj (Name i) m a b e
   vin (Name i) <$> otm s
-               <*> hcom r s b (insertsSystem tvec (Sys us')) m'
+               <*> hcom r s b (insertsSystem tvec us') m'
 vvhcom _ _ _ _ _ = error "vvhcom: case not implemented"
 
 -------------------------------------------------------------------------------
@@ -829,7 +835,7 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   -- Substitute for r and r' directly
   (sr,s'r,bisr,ar) <- (si,si',Sys bisi,ai) `subst` (i,r)
   (sr',s'r',bisr',ar') <- (si,si',Sys bisi,ai) `subst` (i,r')
-  
+
   -- Define O
   let otm z = do
         case bisr of -- This case is unfortunate...
@@ -839,10 +845,10 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
             -- Here I do not use ntm like in Part 3. Instead I unfold it so
             -- that I can take appropriate faces and do some optimization.
             -- z is the name bound in bi.
-            osys <- Sys <$> mapSystem (\alpha z' bi -> do
-                                          (bia,sa,sa',ma) <- (bi,sr,s'r,m) `face` alpha
-                                          ma' <- coe sa' (Name z') bia ma
-                                          coe (Name z') sa bia ma') bs
+            osys <- mapSystem (\alpha z' bi -> do
+                                  (bia,sa,sa',ma) <- (bi,sr,s'r,m) `face` alpha
+                                  ma' <- coe sa' (Name z') bia ma
+                                  coe (Name z') sa bia ma') (Sys bs)
             ocap <- cap sr s'r (Sys bs) m
             hcom s'r z ar osys ocap
 
@@ -851,7 +857,6 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
       -- The part of bis that mentions i in its faces
       bsi = Map.filterWithKey (\(Eqn s s') _ -> i `occurs` (s,s')) bisi -- TODO: not bisi
 
-
   -- Define P
   ptm <- do
     otmsr <- otm sr
@@ -859,30 +864,30 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
                                 (bia,sa,sa',ra,ma) <- (bi,sr',s'r',r,m) `face` alpha
                                 bia' <- bia `subst` (x,sa')
                                 ma' <- coe ra (Name x) (VPLam i bia') ma
-                                coe sa' sa bia ma') bs'
+                                coe sa' sa bia ma') (Sys bs')
 
     psys' <- if Name i `notElem` [sr',s'r'] && isConsistent (eqn (sr',s'r'))
                 then do (rs,as,ms) <- (r,ar',m) `face` (eqn (sr',s'r'))
                         m' <- coe rs (Name i) (VPLam i as) ms
-                        return $ insertSystem (eqn (sr',s'r'),VPLam i m') (Sys psys)
-                else return $ Sys psys
+                        return $ insertSystem (eqn (sr',s'r'),VPLam i m') psys
+                else return psys
     com r r' (VPLam i ai) psys' otmsr -- TODO: should this be ai?
 
   -- Define Q_k. Take the face alpha (s_i = s'_i), free variable w (called z) and bk
   let qtm alpha w bk = do
-        
+
         qsys <- mapSystem (\alpha' z' bi -> do
                               (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha'
                               bia' <- bia @@ sa' -- TODO: subst (z',sa')?
                               ma' <- coe ra ra' (VPLam i bia') ma
-                              coe sa' (Name z') bia ma') bs'
+                              coe sa' (Name z') bia ma') (Sys bs')
 
         qsys' <- if isConsistent (eqn (r,r'))
                     then do (srr',bkr,mr) <- (s'r',bk,m) `face` (eqn (r,r'))
                             l <- fresh
                             m' <- coe srr' (Name l) bkr mr
-                            return $ insertSystem (eqn (r,r'),VPLam l m') (Sys qsys)
-                    else return $ Sys qsys
+                            return $ insertSystem (eqn (r,r'),VPLam l m') qsys
+                    else return qsys
 
         bk' <- bk `subst` (i,r')
         com sr' w bk' qsys' ptm
@@ -890,17 +895,17 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   -- The part of outtmsys where the faces of the system depend on i
   -- (i.e. where we have to use qtm as the system doesn't simplify).
   -- TODO: can we take the face into account likes this?
-  outtmsysi <- Sys <$> mapSystem (\alpha z bi -> do
-                                     t' <- coe (Name z) sr' bi =<< qtm alpha (Name z) (VPLam z bi)
-                                     t' `face` alpha) bsi
+  outtmsysi <- mapSystem (\alpha z bi -> do
+                             t' <- coe (Name z) sr' bi =<< qtm alpha (Name z) (VPLam z bi)
+                             t' `face` alpha) (Sys bsi)
   -- The part of outtmsys where the faces of the system doesn't depend on i
   -- (i.e. where qtm simplifies).
-  outtmsys' <- Sys <$> mapSystem (\alpha z bi -> do
-                                     (bia,sa,sa',ra,ra',ma) <- (bi,sr',s'r',r,r',m) `face` alpha
-                                     bia' <- bia `subst` (z,sa')
-                                     ma' <- coe ra ra' (VPLam i bia') ma
-                                     ma'' <- coe sa' (Name z) bia ma'
-                                     coe (Name z) sa bia ma'') bs'
+  outtmsys' <- mapSystem (\alpha z bi -> do
+                             (bia,sa,sa',ra,ra',ma) <- (bi,sr',s'r',r,r',m) `face` alpha
+                             bia' <- bia `subst` (z,sa')
+                             ma' <- coe ra ra' (VPLam i bia') ma
+                             ma'' <- coe sa' (Name z) bia ma'
+                             coe (Name z) sa bia ma'') (Sys bs')
   let outtmsys = mergeSystem outtmsysi outtmsys'
 
   outtmsysO <- if isConsistent (eqn (r,r'))
@@ -935,28 +940,27 @@ hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = do
   -- k = z
   k <- fresh
   let ptm bi = do
-        psys <- Sys <$> mapSystemUnsafe (\_ ni -> coe s' (Name k) (VPLam k bi) ni) us
+        psys <- mapSystemUnsafe (\_ ni -> coe s' (Name k) (VPLam k bi) ni) (Sys us)
         pcap <- coe s' (Name k) (VPLam k bi) m
         hcom r r' bi psys pcap
   let ftm c = do
-        fsys <- Sys <$> mapSystem (\_ k' bi -> do c' <- coe s' (Name k') (VPLam k bi) c
-                                                  coe (Name k') s (VPLam k bi) c') bs
+        fsys <- mapSystem (\_ k' bi -> do c' <- coe s' (Name k') (VPLam k bi) c
+                                          coe (Name k') s (VPLam k bi) c') (Sys bs)
         fcap <- cap s s' (Sys bs) c
         hcom s' (Name k) a fsys fcap
   otm <- do
-    osys <- Sys <$> mapSystemUnsafe (\_ ni -> ftm ni >>= flip subst (k,s)) us
+    osys <- mapSystemUnsafe (\_ ni -> ftm ni >>= flip subst (k,s)) (Sys us)
     ocap <- ftm m >>= flip subst (k,s)
     hcom r r' a osys ocap
   qtm <- do
-    -- TODO: add a primitive for combining systems?
-    qsys1 <- Map.toList <$> mapSystemUnsafe (\_ ni -> do ni' <- ni `subst` (j,r')
-                                                         ftm ni') us
-    qsys2 <- Sys <$> mapSystem (\_ k bi -> do p' <- ptm bi
-                                              coe (Name k) s (VPLam k bi) p') bs
+    qsys1 <- mapSystemUnsafe (\_ ni -> do ni' <- ni `subst` (j,r')
+                                          ftm ni') (Sys us)
+    qsys2 <- mapSystem (\_ k bi -> do p' <- ptm bi
+                                      coe (Name k) s (VPLam k bi) p') (Sys bs)
     m' <- ftm m
-    let qsys = insertSystem (eqn (r,r'),VPLam k m') $ insertsSystem qsys1 qsys2
+    let qsys = insertSystem (eqn (r,r'),VPLam k m') $ mergeSystem qsys1 qsys2
     hcom s s' a qsys otm
-  outsys <- Sys <$> mapSystemUnsafe (\_ bi -> ptm bi >>= flip subst (k,s')) bs
+  outsys <- mapSystemUnsafe (\_ bi -> ptm bi >>= flip subst (k,s')) (Sys bs)
   box s s' outsys qtm
 hcomHComU _ _ _ _ _ = error "hcomHComU: case not implemented"
 
