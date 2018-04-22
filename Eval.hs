@@ -837,8 +837,7 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   (sr',s'r',bisr',ar') <- (si,si',Sys bisi,ai) `subst` (i,r')
 
   -- Define O
-  let otm z = do
-        case bisr of -- This case is unfortunate...
+  let otm z = case bisr of -- This case is unfortunate...
           Triv b -> do m' <- coe s'r z b m
                        coe z sr b m'
           Sys bs -> do
@@ -848,8 +847,8 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
             osys <- mapSystem (\alpha z' bi -> do
                                   (bia,sa,sa',ma) <- (bi,sr,s'r,m) `face` alpha
                                   ma' <- coe sa' (Name z') bia ma
-                                  coe (Name z') sa bia ma') (Sys bs)
-            ocap <- cap sr s'r (Sys bs) m
+                                  coe (Name z') sa bia ma') bisr
+            ocap <- cap sr s'r bisr m
             hcom s'r z ar osys ocap
 
   let -- The part of bis that doesn't mention i in its faces
