@@ -290,7 +290,7 @@ mkSystem xs = insertsSystem xs eps
 
 mergeSystem :: System a -> System a -> System a
 mergeSystem (Sys xs) ys = Map.toList xs `insertsSystem` ys
-mergeSystem (Triv _) ys = ys
+mergeSystem (Triv x) ys = Triv x
 
 -- allSystem :: Name -> System a -> System a
 -- allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn _ -> i `occurs` eqn) xs)
