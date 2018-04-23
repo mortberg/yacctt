@@ -353,7 +353,7 @@ mapSystemUnsafe f us = do
   case us of
     Sys us -> do bs <- T.sequence $ Map.mapWithKey etaMap us
                  return (Sys bs)
-    Triv u -> Triv <$> etaMap (eqn (Name j,Name j)) u
+    Triv u -> Triv <$> etaMap (eqn (Name (N "_"),Name (N "_"))) u
 
 -- apply f to each face, with binder, with freshening
 mapSystem :: (Eqn -> Name -> Val -> Eval Val) -> System Val -> Eval (System Val)
@@ -366,13 +366,11 @@ mapSystem f us = do
   case us of
     Sys us -> do bs <- T.sequence $ Map.mapWithKey etaMap us
                  return (Sys bs)
-    Triv u -> Triv <$> etaMap (eqn (Name j,Name j)) u
+    Triv u -> Triv <$> etaMap (eqn (Name (N "_"),Name (N "_"))) u
 
 mapSystemNoEta :: (Eqn -> Val -> Eval Val) -> System Val -> Eval (System Val)
 mapSystemNoEta f (Sys us) = runSystem $ Sys $ Map.mapWithKey (\alpha u -> f alpha u) us
-mapSystemNoEta f (Triv u) = do
-  j <- fresh -- This is a bit stupid...
-  runSystem $ Triv $ f (eqn (Name j,Name j)) u
+mapSystemNoEta f (Triv u) = runSystem $ Triv $ f (eqn (Name (N "_"),Name (N "_"))) u
 
 hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
 hcom r s _ _ u0 | r == s = return u0
@@ -855,8 +853,6 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   bs' <- Sys bs' `substOnFaces` (i,r')
   bsi <- Sys bsi `substOnFaces` (i,r')
 
-  -- TODO: case on whether bisr' is empty or not?
-      
   -- Substitute for r and r' directly every *except* for the system
   -- (the reason is that we need to recover the B_i without the
   -- substitution!)
@@ -884,7 +880,8 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
                                 (bia,sa,sa',ra,ma) <- (bi,si,si',r,m) `face` alpha
                                 bia' <- bia `subst` (x,sa')
                                 ma' <- coe ra (Name x) (VPLam i bia') ma
-                                coe sa' sa bia ma') bs' -- NB: we only take (r'/x) on the faces!
+                                -- TODO: should we take "_" here?
+                                coe sa' sa (VPLam (N "_") bia) ma') bs' -- NB: we only take (r'/x) on the faces!
 
     psys' <- if Name i `notElem` [si,si'] && isConsistent (eqn (sr',s'r'))
                 then do (rs,as,ms) <- (r,ai,m) `face` (eqn (sr',s'r'))
@@ -896,20 +893,19 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   -- Define Q_k. Take the face alpha (s_i = s'_i), free variable w
   -- (called z) and bk without (r'/x)
   let qtm alpha w bk = do
-        -- Take the face alpha of everything that occurs later
-        -- TODO: This line crashes with "cubical: toSubst: encountered (0 = 0) in system"
---        (bk,sr',s'r',r,r',m) <- (bk,sr',s'r',r,r',m) `face` alpha
+        (bk,m,bs') <- (bk,m,bs') `face` alpha
+
         qsys <- mapSystem (\alpha' z' bi -> do
                               (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha'
                               bia' <- bia `subst` (z',sa')
                               ma' <- coe ra ra' (VPLam i bia') ma
                               bia <- bia `subst` (i,ra')
-                              coe sa' (Name z') bia ma') bs' -- NB: we only take (r'/x) of the faces!
+                              coe sa' (Name z') (VPLam z' bia) ma') bs' -- NB: we only take (r'/x) of the faces!
         bk' <- bk `subst` (i,r')
         qsys' <- if isConsistent (eqn (r,r'))
                     then do (srr',bk'r,mr) <- (s'r',bk',m) `face` (eqn (r,r'))
                             l <- fresh
-                            m' <- coe srr' (Name l) bk'r mr
+                            m' <- coe srr' (Name l) (VPLam l bk'r) mr
                             return $ insertSystem (eqn (r,r'),VPLam l m') qsys
                     else return qsys
 
@@ -919,7 +915,7 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   -- (i.e. where we have to use qtm as the system doesn't simplify).
   outtmsysi <- mapSystem (\alpha z bi -> do
                            (bia,sa) <- (bi,sr') `face` alpha
-                           coe (Name z) sa bia =<< qtm alpha (Name z) (VPLam z bia))
+                           coe (Name z) sa (VPLam z bia) =<< qtm alpha (Name z) (VPLam z bia))
                          bsi
   -- The part of outtmsys where the faces of the system doesn't depend on i
   -- (i.e. where qtm simplifies).
@@ -927,8 +923,8 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
                              (bia,sa,sa',ra,ra',ma) <- (bi,sr',s'r',r,r',m) `face` alpha
                              bia' <- bia `subst` (z,sa')
                              ma' <- coe ra ra' (VPLam i bia') ma
-                             ma'' <- coe sa' (Name z) bia ma'
-                             coe (Name z) sa bia ma'') bs'
+                             ma'' <- coe sa' (Name z) (VPLam z bia) ma'
+                             coe (Name z) sa (VPLam z bia) ma'') bs'
   let outtmsys = mergeSystem outtmsysi outtmsys'
 
   outtmsysO <- if isConsistent (eqn (r,r'))
@@ -954,7 +950,7 @@ coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 -- TODO: take faces everywhere!
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
-hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = do
+hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = trace "hcom hcomU" $ do
   -- j = y
   j <- fresh
   -- k = z

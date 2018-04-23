@@ -289,8 +289,9 @@ mkSystem :: [(Eqn,a)] -> System a
 mkSystem xs = insertsSystem xs eps
 
 mergeSystem :: System a -> System a -> System a
+mergeSystem (Triv x) _ = Triv x
+mergeSystem _ (Triv y) = Triv y
 mergeSystem (Sys xs) ys = Map.toList xs `insertsSystem` ys
-mergeSystem (Triv x) ys = Triv x
 
 -- allSystem :: Name -> System a -> System a
 -- allSystem i (Sys xs) = Sys (Map.filterWithKey (\eqn _ -> i `occurs` eqn) xs)
@@ -318,6 +319,7 @@ toSubst (Eqn (Name i) r) = (i,r)
 toSubst eqn = error $ "toSubst: encountered " ++ show eqn ++ " in system"
 
 face :: Nominal a => a -> Eqn -> Eval a
+face a (Eqn (Name (N "_")) (Name (N "_"))) = return a -- handle dummy case separately
 face a f = a `subst` toSubst f
 
 -- carve a using the same shape as the system b
