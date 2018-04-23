@@ -954,35 +954,47 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
   box sr' s'r' outsys outtm
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
--- TODO: take faces everywhere!
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
-hcomHComU (VHComU s s' (Sys bs) a) r r' (Sys us) m = trace "hcom hcomU" $ do
-  -- j = y
-  j <- fresh
-  -- k = z
-  k <- fresh
-  let ptm bi = do
-        psys <- mapSystemUnsafe (\_ ni -> coe s' (Name k) (VPLam k bi) ni) (Sys us)
-        pcap <- coe s' (Name k) (VPLam k bi) m
+hcomHComU (VHComU s s' bs a) r r' ns m = traceb "hcom hcomU" $ do
+  -- Define P and parametrize by z
+  let ptm bi z = do
+        -- TODO: take alpha into account
+        psys <- mapSystem (\alpha _ ni -> coe s' (Name z) (VPLam z bi) ni) ns
+        pcap <- coe s' (Name z) (VPLam z bi) m
         hcom r r' bi psys pcap
-  let ftm c = do
-        fsys <- mapSystem (\_ k' bi -> do c' <- coe s' (Name k') (VPLam k bi) c
-                                          coe (Name k') s (VPLam k bi) c') (Sys bs)
-        fcap <- cap s s' (Sys bs) c
-        hcom s' (Name k) a fsys fcap
+
+  -- Define F[c] and parametrize by z
+  let ftm c z = do
+        fsys <- mapSystem (\alpha z' bi -> do
+                              (s,s',bi) <- (s,s',bi) `face` alpha
+                              c' <- coe s' (Name z') (VPLam z' bi) c
+                              coe (Name z') s (VPLam z' bi) c') bs
+        fcap <- cap s s' bs c
+        hcom s' z a fsys fcap
+
+  -- Define O
   otm <- do
-    osys <- mapSystemUnsafe (\_ ni -> ftm ni >>= flip subst (k,s)) (Sys us)
-    ocap <- ftm m >>= flip subst (k,s)
+    -- TODO: take alpha into account
+    osys <- mapSystem (\alpha _ ni -> ftm ni s) ns
+    ocap <- ftm m s
     hcom r r' a osys ocap
+
+  -- Define Q
   qtm <- do
-    qsys1 <- mapSystemUnsafe (\_ ni -> do ni' <- ni `subst` (j,r')
-                                          ftm ni') (Sys us)
-    qsys2 <- mapSystem (\_ k bi -> do p' <- ptm bi
-                                      coe (Name k) s (VPLam k bi) p') (Sys bs)
-    m' <- ftm m
+    -- TODO: take alpha into account?
+    qsys1 <- mapSystem (\alpha z ni -> do ni' <- ni `subst` (z,r')
+                                          ftm ni' (Name z)) ns
+    qsys2 <- mapSystem (\alpha z bi -> do p' <- ptm bi z
+                                          coe (Name z) s (VPLam z bi) p') bs
+    k <- fresh
+    m' <- ftm m (Name k)
+    -- TODO: take r=r' into account in m'
     let qsys = insertSystem (eqn (r,r'),VPLam k m') $ mergeSystem qsys1 qsys2
     hcom s s' a qsys otm
-  outsys <- mapSystemUnsafe (\_ bi -> ptm bi >>= flip subst (k,s')) (Sys bs)
+
+  -- inline P and optimize
+  outsys <- mapSystemNoEta (\alpha bj -> do (r,r',bj,ns,m) <- (r,r',bj,ns,m) `face` alpha
+                                            hcom r r' bj ns m) bs
   box s s' outsys qtm
 hcomHComU _ _ _ _ _ = error "hcomHComU: case not implemented"
 
