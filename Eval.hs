@@ -866,19 +866,14 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
   -- We can use this in otm as we never need the original B_i!
   bisr <- Sys bisi `subst` (i,r)
   -- Define O
-  let otm z = case bisr of -- This case is unfortunate, but for some
-                           -- reason some coe's in Z doesn't get
-                           -- evaluated in loopZ4 if I don't have it.
-          Triv b -> do m' <- coe s'r z b m
-                       coe z sr b m'
-          Sys bs -> do
+  let otm z = do
             -- Here I do not use ntm like in Part 3. Instead I unfold it so
             -- that I can take appropriate faces and do some optimization.
             -- z' is the name bound in bi.
             osys <- mapSystem (\alpha z' bi -> do
                                   (bia,sa,sa',ma) <- (bi,sr,s'r,m) `face` alpha
-                                  ma' <- coe sa' (Name z') bia ma
-                                  coe (Name z') sa bia ma') bisr
+                                  ma' <- coe sa' (Name z') (VPLam z' bia) ma
+                                  coe (Name z') sa (VPLam z' bia) ma') bisr
             ocap <- cap sr s'r bisr m
             hcom s'r z ar osys ocap
 
