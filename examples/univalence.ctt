@@ -18,7 +18,7 @@ pathToEquiv (A B : U) (p : Path U A B) : equiv A B =
 
 -- normal form works
 equivLemma (A B : U) : (v w : equiv A B) -> Path (A -> B) v.1 w.1 -> Path (equiv A B) v w =
-  lemSig (A -> B) (isEquiv A B) (propIsEquiv A B)
+  lemSig (A -> B) (isEquiv A B) (propIsEquivDirect A B)
   
 uaret (A B : U) : retract (equiv A B) (Path U A B) (ua A B) (pathToEquiv A B) =
   \(e : equiv A B) ->
