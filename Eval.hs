@@ -12,6 +12,12 @@ import qualified Data.Traversable as T
 import Cartesian
 import CTT
 
+debug :: Bool
+debug = False
+
+traceb :: String -> a -> a
+traceb s x = if debug then trace s x else x
+
 -----------------------------------------------------------------------
 -- Lookup functions
 
@@ -243,7 +249,7 @@ app u v = case (u,v) of
     Just (PBranch _ xs is t) -> eval (subs (zip is phis) (upds (zip xs us) e)) t
     _ -> error $ "app: missing case in split for " ++ c
   (Ter (Split _ _ ty _) e,VHCom r s a ws w) ->
-    trace "split hcom" $ eval e ty >>= \x -> case x of
+    traceb "split hcom" $ eval e ty >>= \x -> case x of
     VPi _ f -> do
       j <- fresh
       fill <- hcom r (Name j) a ws w
@@ -262,14 +268,14 @@ app u v = case (u,v) of
     _ -> error $ "app: Split annotation not a Pi type " ++ show u
   (Ter Split{} _,_) -- | isNeutral v
                     -> return (VSplit u v)
-  (VCoe r s (VPLam i (VPi a b)) u0, v) -> trace "coe pi" $ do
+  (VCoe r s (VPLam i (VPi a b)) u0, v) -> traceb "coe pi" $ do
     j <- fresh
     let bij = b `swap` (i,j)
     w <- coe s (Name j) (VPLam i a) v
     w0 <- coe s r (VPLam i a) v
     bijw <- VPLam j <$> app bij w
     coe r s bijw =<< app u0 w0
-  (VHCom r s (VPi a b) us u0, v) -> trace "hcom pi" $ do
+  (VHCom r s (VPi a b) us u0, v) -> traceb "hcom pi" $ do
     us' <- mapSystem (\alpha _ u -> app u =<< (v `face` alpha)) us
     join $ hcom r s <$> app b v <*> pure us' <*> app u0 v
   (VHCom _ _ _ (Triv u) _, v) -> error "app: trying to apply vhcom in triv"
@@ -376,14 +382,14 @@ hcom :: II -> II -> Val -> System Val -> Val -> Eval Val
 hcom r s _ _ u0 | r == s = return u0
 hcom r s _ (Triv u) _    = u @@ s
 hcom r s a us u0   = case a of
-  VPathP a v0 v1 -> trace "hcom path" $ do
+  VPathP a v0 v1 -> traceb "hcom path" $ do
     j <- fresh
     us' <- insertsSystem [(j~>0,VPLam (N "_") v0),(j~>1,VPLam (N "_") v1)] <$>
              mapSystemUnsafe (const (@@ j)) us
     aj <- a @@ j
     u0j <- u0 @@ j
     VPLam j <$> hcom r s aj us' u0j
-  VSigma a b -> trace "hcom sigma" $ do
+  VSigma a b -> traceb "hcom sigma" $ do
     j <- fresh
     us1 <- mapSystemUnsafe (const (return . fstVal)) us
     us2 <- mapSystemUnsafe (const (return . sndVal)) us
@@ -526,12 +532,12 @@ hcom r s a us u0   = case a of
 coe :: II -> II -> Val -> Val -> Eval Val
 coe r s a u | r == s = return u
 coe r s (VPLam i a) u = case a of
-  VPathP a v0 v1 -> trace "coe path" $ do
+  VPathP a v0 v1 -> traceb "coe path" $ do
     j <- fresh
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
     return $ VPLam j out
-  VSigma a b -> trace "coe sigma" $ do
+  VSigma a b -> traceb "coe sigma" $ do
     j <- fresh
     let (u1,u2) = (fstVal u, sndVal u)
     u1' <- coe r (Name j) (VPLam i a) u1
@@ -714,7 +720,7 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 
 -- In Part 3: i corresponds to y, and, j to x
 vvcoe :: Val -> II -> II -> Val -> Eval Val
-vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
+vvcoe (VPLam i (VV j a b e)) r s m | i /= j = traceb "vvcoe i != j" $ do
   -- Are all of these faces necessary:
   (rj0,ej0,aj0,mj0) <- (r,equivFun e,a,m) `subst` (j,0)
   vj0 <- join $ app ej0 <$> coe rj0 (Name i) (VPLam i aj0) mj0
@@ -726,12 +732,12 @@ vvcoe (VPLam i (VV j a b e)) r s m | i /= j = trace "vvcoe i != j" $ do
   vin (Name j) <$> coe r s (VPLam i a) m
                <*> com r s (VPLam i b) tvec vr
 
-vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s m = trace "vvcoe 0->s" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s m = traceb "vvcoe 0->s" $ do
   ej0 <- equivFun e `subst` (j,0)
   ej0m <- app ej0 m
   vin s m <$> coe 0 s (VPLam j b) ej0m
 
-vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = trace "vvcoe 1->s" $ do
+vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = traceb "vvcoe 1->s" $ do
   psys <- if s == 1
              then return $ Triv (VPLam (N "_") m)
              else do -- TODO: this is sketchy, but probably not the bug
@@ -746,7 +752,7 @@ vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = trace "vvcoe 1->s" $ do
                               <*> coe 1 s (VPLam j b) m)
   return $ vin s (fstVal otm) ptm
 
-vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = trace "vvcoe i->s" $ do
+vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = traceb "vvcoe i->s" $ do
   -- i = y
   -- j = x
   -- k = w
@@ -797,7 +803,7 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
 vvhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
-vvhcom (VV i a b e) r s us m = trace "vvhcom" $ do
+vvhcom (VV i a b e) r s us m = traceb "vvhcom" $ do
   j <- fresh
   let otm y = hcom r y a us m
   ti0 <- do
@@ -842,7 +848,7 @@ substOnFaces (Sys xs) f =
 substOnFaces (Triv x) f = return $ Triv x
 
 coeHComU :: Val -> II -> II -> Val -> Eval Val
-coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = trace "coe hcomU" $ do
+coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ do
   -- First decompose the system
   let -- The part of bis that doesn't mention i in its faces
       bs' = Map.filterWithKey (\(Eqn s s') _ -> i `notOccurs` (s,s')) bisi
