@@ -19,7 +19,7 @@ pathToEquiv (A B : U) (p : Path U A B) : equiv A B =
 -- normal form works
 equivLemma (A B : U) : (v w : equiv A B) -> Path (A -> B) v.1 w.1 -> Path (equiv A B) v w =
   lemSig (A -> B) (isEquiv A B) (propIsEquivDirect A B)
-  
+
 uaret (A B : U) : retract (equiv A B) (Path U A B) (ua A B) (pathToEquiv A B) =
   \(e : equiv A B) ->
     equivLemma A B (pathToEquiv A B (ua A B e)) e (<i> \(a : A) -> uabeta A B e (coe 1->i (<_> A) a) @ i)
@@ -51,3 +51,51 @@ univalence (A : U) : isContr ((B : U) * equiv A B) =
   retIsContr ((B : U) * equiv A B) ((B : U) * Path U A B)
      (f1 A) (f2 A) (uaretsig A) (isContrPath A)
 
+univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
+ ((B,idEquiv B)
+ ,\(w : (X : U) * equiv X B) ->
+   let goal : Path ((X : U) * equiv X B) w (B,idEquiv B) = undefined
+       foo : Path U U U =
+         <i> let VB : U = ua w.1 B w.2 @ i
+                 projB (g : VB) : B = Vproj i g w.1 B (equivToEquivInhProp w.1 B w.2)
+                 projBisEquiv : isEquiv VB B projB =
+                   \(b : B) -> let ctr : fiber VB B projB b =
+                                     (Vin i (w.2.2 b).1.1
+                                            (hcom 1->0 B [(i=1) -> <_> b
+                                                         ,(i=0) -> (w.2.2 b).1.2] b)
+                                     ,<j> hcom 1->j B [(i=1) -> <_> b
+                                                      ,(i=0) -> (w.2.2 b).1.2] b)
+                                   contr (v : fiber VB B projB b) : Path (fiber VB B projB b) v ctr = undefined
+                               in (ctr,contr)
+             in U
+   in goal)
+
+ -- ((B,idEquiv B)
+ -- ,\(w : (X : U) * equiv X B) ->
+ --   <i> let GlueB : U = Glue B [(i=0) -> (B,idEquiv B)
+ --                              ,(i=1) -> w]
+ --           unglueB (g : GlueB) : B = unglue g [(i=0) -> (B,idEquiv B)
+ --                                              ,(i=1) -> w]
+ --           unglueEquiv : isEquiv GlueB B unglueB =
+ --              \(b : B)-> let ctr : fiber GlueB B unglueB b =
+ --                               (glue (comp (<j> B) b [(i=0) -> <j> b
+ --                                                     ,(i=1) -> (w.2.2 b).1.2])
+ --                                     [(i=0) -> b
+ --                                     ,(i=1) -> (w.2.2 b).1.1]
+ --                               ,fill (<j> B) b [(i=0) -> <j> b
+ --                                               ,(i=1) -> (w.2.2 b).1.2])
+ --                             contr (v : fiber GlueB B unglueB b) : Path (fiber GlueB B unglueB b) ctr v =
+ --                               <j> (glue (comp (<j> B) b [(i=0) -> <k> v.2 @ j /\ k
+ --                                                         ,(i=1) -> ((w.2.2 b).2 v @ j).2
+ --                                                         ,(j=0) -> fill (<j> B) b [(i=0) -> <j> b
+ --                                                                                  ,(i=1) -> (w.2.2 b).1.2]
+ --                                                         ,(j=1) -> v.2])
+ --                                         [(i=0) -> v.2 @ j
+ --                                         ,(i=1) -> ((w.2.2 b).2 v @ j).1]
+ --                                   ,fill (<j> B) b [(i=0) -> <l> v.2 @ j /\ l
+ --                                                   ,(i=1) -> ((w.2.2 b).2 v @ j).2
+ --                                                   ,(j=0) -> fill (<j> B) b [(i=0) -> <j> b
+ --                                                                            ,(i=1) -> (w.2.2 b).1.2]
+ --                                                   ,(j=1) -> v.2])
+ --                         in (ctr,contr)
+ --        in (GlueB,unglueB,unglueEquiv))
