@@ -253,6 +253,8 @@ equivToEquivInhProp (A B : U) (f : equiv A B) : equivInhProp A B =
 equivInhPropToEquiv (A B : U) (f : equivInhProp A B) : equiv A B =
   (f.1,\(b : B) -> isInhPropToIsContr (fiber A B f.1 b) (f.2 b))
 
+idEquivInhProp (A : U) : equivInhProp A A = equivToEquivInhProp A A (idEquiv A)
+
 -- ua (A B : U) (e : equiv A B) : Path U A B =
 --   <i> V i A B (equivToEquivInhProp A B e)
 

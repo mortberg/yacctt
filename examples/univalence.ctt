@@ -81,6 +81,39 @@ univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
              in U
    in goal)
 
+
+-- Attempt to switch to equivInhProp
+-- univalenceAlt (B : U) : isContr ((X : U) * equivInhProp X B) =
+--  ((B,idEquivInhProp B)
+--  ,\(w : (X : U) * equivInhProp X B) ->
+--    let goal : Path ((X : U) * equivInhProp X B) w (B,idEquivInhProp B) = undefined
+--        foo : Path U U U =
+--          <i> let VB : U = V i w.1 B w.2
+--                  projB (g : VB) : B = Vproj i g w.1 B w.2
+--                  projBisEquiv : isEquivInhProp VB B projB =
+--                    \(b : B) -> let ctr : fiber VB B projB b =
+--                                      (Vin i (w.2.2 b).1.1
+--                                             (hcom 1->0 B [(i=1) -> <_> b
+--                                                          ,(i=0) -> (w.2.2 b).1.2] b)
+--                                      ,<j> hcom 1->j B [(i=1) -> <_> b
+--                                                       ,(i=0) -> (w.2.2 b).1.2] b)
+--                                    contr (v1 v2 : fiber VB B projB b) : Path (fiber VB B projB b) v1 v2 = undefined
+--                                      -- <j> (Vin i ((w.2.2 b).2 v (w.2.2 b).1 @ j).1
+--                                      --            (hcom 1->0 B [(i=0) -> ((w.2.2 b).2 v (w.2.2 b).1 @ j).2
+--                                      --                         ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
+--                                      --                         ,(j=0) -> v.2
+--                                      --                         ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
+--                                      --                                                   ,(i=0) -> (w.2.2 b).1.2] b] b)
+--                                      --     ,<l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v (w.2.2 b).1 @ j).2
+--                                      --                      ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
+--                                      --                      ,(j=0) -> v.2
+--                                      --                      ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
+--                                      --                                                ,(i=0) -> (w.2.2 b).1.2] b] b)
+--                                in (ctr,contr)
+--              in U
+--    in goal)
+
+
 -- This version does not typecheck because of bad definition of equivalence:
 -- univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
 --  ((B,idEquiv B)
