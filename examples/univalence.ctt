@@ -119,8 +119,8 @@ univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
 --  ((B,idEquiv B)
 --  ,\(w : (X : U) * equiv X B) ->
 --    let goal : Path ((X : U) * equiv X B) w (B,idEquiv B) =
---          <i> let VB : U = ua w.1 B w.2 @ i
---                  projB (g : VB) : B = Vproj i g w.1 B (equivToEquivInhProp w.1 B w.2)
+--          <i> let VB : U = V i w.1 B w.2
+--                  projB (g : VB) : B = Vproj i g w.1 B w.2
 --                  projBisEquiv : isEquiv VB B projB =
 --                    \(b : B) -> let ctr : fiber VB B projB b =
 --                                      (Vin i (w.2.2 b).1.1
