@@ -121,6 +121,30 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
 --   <k> coe 0->k (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> <_> a] a)
 --                       (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> <_> a] a)) d
 
+connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
+  PathP (<i> Path A a (p @ i)) (<_> a) p = \(b : A) -> \(p : PathP (<_> A) a b) ->
+  -- J A a (\(b : A) (p : Path A a b) -> PathP (<i> Path A a (p @ i)) (<_> a) p) (<_ _> a)
+  -- Normal form
+  <i j> hcom 0->1 A
+             [ (i = 0) -> <k> hcom k->1 A
+                                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                                   , (j = 1) -> <l> coe l->1 (<_> A) a ]
+                                   (coe k->1 (<_> A) a)
+             , (i = 1) -> <k> hcom k->1 A
+                                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                                   , (j = 1) -> <l> coe l->1 (<_> A)
+                                                        (hcom 0->1 A [ (l = 0) -> <_> a
+                                                                     , (l = 1) -> p ] a) ]
+                                                        (coe k->1 (<_> A) (hcom 0->j A [ (k = 0) -> <_> a
+                                                                                       , (k = 1) -> p ] a))
+             , (j = 0) -> <_> a
+             , (j = 1) -> <_> p @ i ]
+             (hcom 0->1 A
+                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                   , (j = 1) -> <l> coe l->1 (<_> A) (hcom 0->i A [ (l = 0) -> <_> a
+                                                                  , (l = 1) -> p ] a) ]
+                                                                  (coe 0->1 (<_> A) a))
+
 --- hlevels
 
 prop (A : U) : U = (a b : A) -> Path A a b
