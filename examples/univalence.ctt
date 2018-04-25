@@ -2,8 +2,8 @@ module univalence where
 
 import prelude
 
-ua (A B : U) (e : equiv A B) : Path U A B =
-  <i> V i A B (equivToEquivInhProp A B e)
+ua (A B : U) (e : equiv A B) : Path U A B = <i> V i A B e
+  -- <i> V i A B (equivToEquivInhProp A B e)
 
 uabeta (A B : U) (e : equiv A B) (a : A) :
   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
@@ -57,7 +57,7 @@ univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
    let goal : Path ((X : U) * equiv X B) w (B,idEquiv B) = undefined
        foo : Path U U U =
          <i> let VB : U = ua w.1 B w.2 @ i
-                 projB (g : VB) : B = Vproj i g w.1 B (equivToEquivInhProp w.1 B w.2)
+                 projB (g : VB) : B = Vproj i g w.1 B w.2
                  projBisEquiv : isEquiv VB B projB =
                    \(b : B) -> let ctr : fiber VB B projB b =
                                      (Vin i (w.2.2 b).1.1

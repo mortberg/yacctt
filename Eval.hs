@@ -782,14 +782,33 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = traceb "vvcoe i->s" $ do
         t' <- coe eps (Name i) (VPLam i a0) t -- Do we need to take any more faces here? (used to be VCoe)
         p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
         return $ VPair t' (VPLam l p0')
-  e0p02 <- sndVal <$> app (equivContr e0) p0
 
-  e0p02q <- join $ app e0p02 <$> qtm 0 m0
+        
+  -- Old code for defining R as in Part 3:
+  -- e0p02 <- sndVal <$> app (equivContr e0) p0
+  -- e0p02q <- join $ app e0p02 <$> qtm 0 m0
+  -- foo <- coe 1 0 vty m
+  -- foo1 <- foo `subst` (i,1)
+  -- q1 <- qtm 1 foo1
+  -- rtm' <- app e0p02q q1
+  -- rtm <- rtm' @@ i
+
+  -- New version of R using RedPRL style equivalence
+  -- TODO: optimize!
+  e0p0 <- app (equivContr e0) p0
+  let e0p01 = fstVal e0p0 -- Center of contraction
+      e0p02 = sndVal e0p0 -- Proof that anything is equal to the center
+  -- Define R0
+  r0 <- join $ app e0p02 <$> qtm 0 m0
+  -- Define R1
   foo <- coe 1 0 vty m
   foo1 <- foo `subst` (i,1)
   q1 <- qtm 1 foo1
-  rtm' <- app e0p02q q1
-  rtm <- rtm' @@ i
+  r1 <- app e0p02 q1
+  -- We now want R0 = R1, we get this is a path in direction i (=y) as desired
+  let ty = VSigma a0 (VLam "a'" a0 (VPathP (VPLam (N "_") b0) (VApp (VFst e0) (VVar "a'" a0)) p0))
+  rtm <- hcom 1 0 ty (mkSystem [(i~>0,r0),(i~>1,r1)]) e0p01
+
   (as,bs,es) <- (a,b,e) `subst` (j,s)
   (o0s,o1s) <- (o0,o1) `subst` (k,s)
   m' <- vproj (Name i) m as bs es -- Can m depend on i? This is used in the i=s case below
