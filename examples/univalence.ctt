@@ -51,12 +51,27 @@ univalence (A : U) : isContr ((B : U) * equiv A B) =
   retIsContr ((B : U) * equiv A B) ((B : U) * Path U A B)
      (f1 A) (f2 A) (uaretsig A) (isContrPath A)
 
+
+-- Alternative proof of univalence. We prove that Vproj is an
+-- equivalence and from this we directly get univalence. This is very
+-- similar to the proof of univalence using that unglue is an
+-- equivalence in CCHM (Corollary 10).
+-- Compare with: https://github.com/mortberg/cubicaltt/blob/master/examples/univalence.ctt#L83
+
+-- First define identity equivalence using or connection
+-- TODO: can we do the proof below with the other definition of the id equivalence?
+idEquivConnOr (B : U) : equiv B B =
+  (idfun B
+  ,\(b : B) -> ((b,<_> b)
+               ,\(v : fiber B B (idfun B) b) ->
+                  <i> (v.2 @ i,<j> connOr B v.1 b v.2 @ i @ j)))
+
+-- Direct proof of univalence using the fact that Vproj is an equivalence
 univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
- ((B,idEquiv B)
+ ((B,idEquivConnOr B)
  ,\(w : (X : U) * equiv X B) ->
-   let goal : Path ((X : U) * equiv X B) w (B,idEquiv B) = undefined
-       foo : Path U U U =
-         <i> let VB : U = ua w.1 B w.2 @ i
+   let goal : Path ((X : U) * equiv X B) w (B,idEquivConnOr B) =
+         <i> let VB : U = V i w.1 B w.2
                  projB (g : VB) : B = Vproj i g w.1 B w.2
                  projBisEquiv : isEquiv VB B projB =
                    \(b : B) -> let ctr : fiber VB B projB b =
@@ -78,7 +93,7 @@ univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
                                                           ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
                                                                                     ,(i=0) -> (w.2.2 b).1.2] b] b)
                                in (ctr,contr)
-             in U
+             in (VB,projB,projBisEquiv)
    in goal)
 
 
@@ -111,35 +126,4 @@ univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
 --                                      --                                                ,(i=0) -> (w.2.2 b).1.2] b] b)
 --                                in (ctr,contr)
 --              in U
---    in goal)
-
-
--- This version does not typecheck because of bad definition of equivalence:
--- univalenceAlt (B : U) : isContr ((X : U) * equiv X B) =
---  ((B,idEquiv B)
---  ,\(w : (X : U) * equiv X B) ->
---    let goal : Path ((X : U) * equiv X B) w (B,idEquiv B) =
---          <i> let VB : U = V i w.1 B w.2
---                  projB (g : VB) : B = Vproj i g w.1 B w.2
---                  projBisEquiv : isEquiv VB B projB =
---                    \(b : B) -> let ctr : fiber VB B projB b =
---                                      (Vin i (w.2.2 b).1.1
---                                             (hcom 1->0 B [(i=1) -> <_> b
---                                                          ,(i=0) -> (w.2.2 b).1.2] b)
---                                      ,<j> hcom 1->j B [(i=1) -> <_> b
---                                                       ,(i=0) -> (w.2.2 b).1.2] b)
---                                    contr (v : fiber VB B projB b) : Path (fiber VB B projB b) v ctr =
---                                      <j> (Vin i ((w.2.2 b).2 v @ j).1
---                                                 (hcom 1->0 B [(i=0) -> ((w.2.2 b).2 v @ j).2
---                                                              ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                                              ,(j=0) -> v.2
---                                                              ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
---                                                                                        ,(i=0) -> (w.2.2 b).1.2] b] b)
---                                          ,<l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v @ j).2
---                                                           ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                                           ,(j=0) -> v.2
---                                                           ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
---                                                                                     ,(i=0) -> (w.2.2 b).1.2] b] b)
---                                in (ctr,contr)
---              in (VB,projB,projBisEquiv)
 --    in goal)
