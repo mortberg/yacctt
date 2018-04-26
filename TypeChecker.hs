@@ -232,9 +232,16 @@ check a t = case (a,t) of
   (VPathP p a0 a1,PLam _ e) -> do
     (u0,u1) <- checkPLam p t
     ns <- asks names
-    unlessM (convTC ns a0 u0 <&&> convTC ns a1 u1) $
-      throwError $ "path endpoints don't match for " ++ show e ++ ", got " ++
-                   show (u0,u1) ++ ", but expected " ++ show (a0,a1)
+    (nu0,nu1) <- normalTC ns (u0,u1)
+    (na0,na1) <- normalTC ns (a0,a1)
+    unlessM (convTC ns a0 u0) $
+      throwError $ "Left endpoints don't match for \n" ++ show e ++ "\ngot\n" ++
+                   show u0 ++ "\nbut expected\n" ++ show a0 ++
+                   "\n\nNormal forms:\n" ++ show nu0 ++ "\nand\n" ++ show na0
+    unlessM (convTC ns a1 u1) $
+      throwError $ "Right endpoints don't match for \n" ++ show e ++ "\ngot\n" ++
+                   show u1 ++ "\nbut expected\n" ++ show a1 ++
+                   "\n\nNormal forms:\n" ++ show nu1 ++ "\nand\n" ++ show na1
   (VU,V r a b e) -> do
     checkII r
     check VU b
