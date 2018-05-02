@@ -867,22 +867,21 @@ substOnFaces (Sys xs) f =
 substOnFaces (Triv x) f = return $ Triv x
 
 coeHComU :: Val -> II -> II -> Val -> Eval Val
-coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ do
+coeHComU (VPLam i (VHComU si s'i (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ do
   -- First decompose the system
   let -- The part of bis that doesn't mention i in its faces
-      bs' = Map.filterWithKey (\(Eqn s s') _ -> i `notOccurs` (s,s')) bisi
+      bs' = Sys $ Map.filterWithKey (\alpha _ -> i `notOccurs` alpha) bisi
       -- The part of bis that mentions i in its faces
-      bsi = Map.filterWithKey (\(Eqn s s') _ -> i `occurs` (s,s')) bisi
-
-  -- Then do the substitution, *only* on the faces, not on the types
-  bs' <- Sys bs' `substOnFaces` (i,r')
-  bsi <- Sys bsi `substOnFaces` (i,r')
+      bsi = Map.filterWithKey (\alpha _ -> i `occurs` alpha) bisi
 
   -- Substitute for r and r' directly every *except* for the system
   -- (the reason is that we need to recover the B_i without the
   -- substitution!)
-  (sr,s'r,ar) <- (si,si',ai) `subst` (i,r)
-  (sr',s'r',ar') <- (si,si',ai) `subst` (i,r')
+  (sr,s'r,ar) <- (si,s'i,ai) `subst` (i,r)
+  (sr',s'r',ar') <- (si,s'i,ai) `subst` (i,r')
+
+  -- Do the substitution, *only* on the faces, not on the types
+  bsi <- Sys bsi `substOnFaces` (i,r')
 
   -- We can use this in otm as we never need the original B_i!
   bisr <- Sys bisi `subst` (i,r)
@@ -892,26 +891,27 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
             -- that I can take appropriate faces and do some optimization.
             -- z' is the name bound in bi.
             osys <- mapSystem (\alpha z' bi -> do
-                                  (bia,sa,sa',ma) <- (bi,sr,s'r,m) `face` alpha
-                                  ma' <- coe sa' (Name z') (VPLam z' bia) ma
-                                  coe (Name z') sa (VPLam z' bia) ma') bisr
+                                  (bia,sra,s'ra,ma) <- (bi,sr,s'r,m) `face` alpha
+                                  ma' <- coe s'ra (Name z') (VPLam z' bia) ma
+                                  coe (Name z') sra (VPLam z' bia) ma') bisr
             ocap <- cap sr s'r bisr m
             hcom s'r z ar osys ocap
 
   -- Define P(r'/x)
   ptm <- do
     otmsr <- otm sr
+    -- TODO: psys is quite sketchy!
     psys <- mapSystem (\alpha x bi -> do
-                                (bia,sa,sa',ra,ma) <- (bi,si,si',r,m) `face` alpha
-                                bia' <- bia `subst` (x,sa')
+                                (bia,sa,s'a,ra,ma) <- (bi,si,s'i,r,m) `face` alpha
+                                bia' <- bia @@ s'a
                                 ma' <- coe ra (Name x) (VPLam i bia') ma
-                                -- TODO: should we take "_" here?
-                                coe sa' sa (VPLam (N "_") bia) ma') bs' -- NB: we only take (r'/x) on the faces!
+                                -- TODO: should we really take "_" here?
+                                coe s'a sa (VPLam (N "_") bia) ma') bs' -- NB: we only take (r'/x) on the faces!
 
-    psys' <- if Name i `notElem` [si,si'] && isConsistent (eqn (sr',s'r'))
-                then do (rs,as,ms) <- (r,ai,m) `face` (eqn (sr',s'r'))
+    psys' <- if Name i `notElem` [si,s'i] && isConsistent (eqn (si,s'i))
+                then do (rs,as,ms) <- (r,ai,m) `face` (eqn (si,s'i))
                         m' <- coe rs (Name i) (VPLam i as) ms
-                        return $ insertSystem (eqn (sr',s'r'),VPLam i m') psys
+                        return $ insertSystem (eqn (si,s'i),VPLam i m') psys
                 else return psys
     com r r' (VPLam i ai) psys' otmsr
 
@@ -921,11 +921,11 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
         (bk,m,bs') <- (bk,m,bs') `face` alpha
 
         qsys <- mapSystem (\alpha' z' bi -> do
-                              (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha'
-                              bia' <- bia `subst` (z',sa')
-                              ma' <- coe ra ra' (VPLam i bia') ma
-                              bia <- bia `subst` (i,ra')
-                              coe sa' (Name z') (VPLam z' bia) ma') bs' -- NB: we only take (r'/x) of the faces!
+                              (bia,s'r'a,ra,r'a,ma) <- (bi,s'r',r,r',m) `face` alpha'
+                              bia' <- bia `subst` (z',s'r'a)
+                              ma' <- coe ra r'a (VPLam i bia') ma
+                              bia <- bia `subst` (i,r'a)
+                              coe s'r'a (Name z') (VPLam z' bia) ma') bs' -- NB: we only take (r'/x) of the faces!
         bk' <- bk `subst` (i,r')
         qsys' <- if isConsistent (eqn (r,r'))
                     then do (srr',bk'r,mr) <- (s'r',bk',m) `face` (eqn (r,r'))
@@ -938,39 +938,41 @@ coeHComU (VPLam i (VHComU si si' (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
 
   -- The part of outtmsys where the faces of the system depend on i
   -- (i.e. where we have to use qtm as the system doesn't simplify).
-  outtmsysi <- mapSystem (\alpha z bi -> do
-                           (bia,sa) <- (bi,sr') `face` alpha
-                           coe (Name z) sa (VPLam z bia) =<< qtm alpha (Name z) (VPLam z bia))
-                         bsi
+  tveci <- mapSystem (\alpha z bi -> do
+                         (bia,sr'a,r'a) <- (bi,sr',r') `face` alpha
+                         bra <- bia `subst` (i,r'a)
+                         coe (Name z) sr'a (VPLam z bra) =<< qtm alpha (Name z) (VPLam z bia)) bsi
+    
   -- The part of outtmsys where the faces of the system doesn't depend on i
   -- (i.e. where qtm simplifies).
-  outtmsys' <- mapSystem (\alpha z bi -> do
-                             (bia,sa,sa',ra,ra',ma) <- (bi,sr',s'r',r,r',m) `face` alpha
-                             bia' <- bia `subst` (z,sa')
-                             ma' <- coe ra ra' (VPLam i bia') ma
-                             ma'' <- coe sa' (Name z) (VPLam z bia) ma'
-                             coe (Name z) sa (VPLam z bia) ma'') bs'
-  let outtmsys = mergeSystem outtmsysi outtmsys'
+  tvec' <- mapSystem (\alpha z bi -> do
+                         (bia,sr'a,s'r'a,ra,r'a,ma) <- (bi,sr',s'r',r,r',m) `face` alpha
+                         bia' <- bia `subst` (z,s'r'a)
+                         biar' <- bia `subst` (i,r'a)
+                         ma' <- coe ra r'a (VPLam i bia') ma
+                         ma'' <- coe s'r'a (Name z) (VPLam z biar') ma'
+                         coe (Name z) sr'a (VPLam z biar') ma'') bs'
+  let outtmsys = mergeSystem tveci tvec'
 
-  outtmsysO <- if isConsistent (eqn (r,r'))
-                  then do k <- fresh
-                          otmk <- otm (Name k)
-                          -- TODO: can we take the eqn into account like this:
-                          otmk' <- otmk `face` (eqn (r,r'))
-                          return $ insertSystem (eqn (r,r'),VPLam k otmk') outtmsys
-                  else return outtmsys
-  outtm <- hcom sr' s'r' ar' outtmsysO ptm
+  tvec <- if isConsistent (eqn (r,r'))
+             then do k <- fresh
+                     otmk <- otm (Name k)
+                     -- TODO: can we take the eqn into account like this:
+                     otmk' <- otmk `face` (eqn (r,r'))
+                     return $ insertSystem (eqn (r,r'),VPLam k otmk') outtmsys
+            else return outtmsys
+  outtm <- hcom sr' s'r' ar' tvec ptm
 
   -- Like above we only use qtm when i does not occur in the faces
-  outsysi <- mapSystemNoEta (\alpha bi -> qtm alpha s'r' bi) bsi
+  uveci <- mapSystemNoEta (\alpha bi -> qtm alpha s'r' bi) bsi
   -- And in the case when i does occur in the face we do the simplification
-  outsys' <- mapSystemNoEta (\alpha bi -> do
-                                (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha
-                                bia' <- bia @@ sa'
-                                coe ra ra' (VPLam i bia') ma) bs'
-  let outsys = mergeSystem outsysi outsys'
+  uvec' <- mapSystemNoEta (\alpha bi -> do
+                              (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha
+                              bia' <- bia @@ sa'
+                              coe ra ra' (VPLam i bia') ma) bs'
+  let uvec = mergeSystem uveci uvec'
 
-  box sr' s'r' outsys outtm
+  box sr' s'r' uvec outtm
 coeHComU _ _ _ _ = error "coeHComU: case not implemented"
 
 hcomHComU :: Val -> II -> II -> System Val -> Val -> Eval Val
