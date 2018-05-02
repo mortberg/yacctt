@@ -98,7 +98,8 @@ instance Nominal Val where
     -- VHCompU a ts            -> occurs x (a,ts)
     -- VUnGlueElemU a b es     -> occurs x (a,b,es)
 
-  subst u (i,r) = case u of
+  subst u (i,r) | i `notOccurs` u = return u -- WARNING: this can be very bad!
+                | otherwise = case u of
     VU                             -> return VU
     Ter t e                        -> Ter t <$> subst e (i,r)
     VPi a f                        -> VPi <$> subst a (i,r) <*> subst f (i,r)
