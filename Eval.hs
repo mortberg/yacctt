@@ -723,13 +723,13 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s m | i /= j = traceb "vvcoe i != j" $ do
   -- Are all of these faces necessary:
-  (rj0,ej0,aj0,mj0) <- (r,equivFun e,a,m) `subst` (j,0)
-  vj0 <- join $ app ej0 <$> coe rj0 (Name i) (VPLam i aj0) mj0
-  (rj1,bj1,mj1) <- (r,b,m) `subst` (j,1)
-  vj1 <- coe rj1 (Name i) (VPLam i bj1) mj1
+  (ej0,aj0) <- (equivFun e,a) `subst` (j,0)
+  vj0 <- join $ app ej0 <$> coe r (Name i) (VPLam i aj0) m
+  bj1 <- b `subst` (j,1)
+  vj1 <- coe r (Name i) (VPLam i bj1) m
   let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
-  (mr,ar,br,er) <- (m,a,b,e) `subst` (i,r)
-  vr <- vproj (Name j) mr ar br er
+  (ar,br,er) <- (a,b,e) `subst` (i,r)
+  vr <- vproj (Name j) m ar br er
   vin (Name j) <$> coe r s (VPLam i a) m
                <*> com r s (VPLam i b) tvec vr
 
@@ -761,8 +761,9 @@ vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = traceb "vvcoe i->s" $ do
   k <- fresh
   l <- fresh
   let (ak,bk,ek) = (a,b,e) `swap` (j,k)
-  m0 <- m `subst` (i,0)
-  m1 <- m `subst` (i,1)
+  -- i # m ?
+  m0 <- return m -- `subst` (i,0)
+  m1 <- return m -- `subst` (i,1)
 
   -- Define O_0 and O_1 separately (O_eps is only used under i=eps)
   o0 <- do m0' <- coe 0 (Name k) vty m0 -- do we need subst (i,0) on vty as well?
