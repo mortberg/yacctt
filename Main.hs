@@ -186,11 +186,11 @@ imports v st@(notok,loaded,mods) f
     case pModule ts of
       Bad s -> error ("Parse failed in " ++ show f ++ "\n" ++ show s)
       Ok mod@(Module (AIdent (_,name)) imp decls) -> do
-        let imp_ctt = [prefix ++ i ++ ".ctt" | Import (AIdent (_,i)) <- imp]
+        let imp_ytt = [prefix ++ i ++ ".ytt" | Import (AIdent (_,i)) <- imp]
         when (name /= dropExtension (takeFileName f)) $
           error ("Module name mismatch in " ++ show f ++ " with wrong name " ++ name)
         (notok1,loaded1,mods1) <-
-          foldM (imports v) (f:notok,loaded,mods) imp_ctt
+          foldM (imports v) (f:notok,loaded,mods) imp_ytt
         when v $ putStrLn $ "Parsed " ++ show f ++ " successfully!"
         return (notok,f:loaded1,mods1 ++ [mod])
 
