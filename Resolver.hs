@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
--- | Convert the concrete syntax into the syntax of cubical TT.
+-- | Convert the concrete syntax into the syntax of yacctt
 module Resolver where
 
 import Control.Applicative

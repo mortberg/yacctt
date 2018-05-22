@@ -18,7 +18,7 @@ GRAMMAR_OBJECT_FILES = $(GRAMMAR_HS_FILES:.hs=.o)
 PROFILING = # -prof -fprof-auto
 GHCOPTIONS = -O2 -rtsopts -v0 $(PROFILING)
 
-all: cubical
+all: yacctt
 
 # There should be a way to make ghc link with the appropriate libraries,
 # without using the --make option, but I can't figure it out.  The libraries
@@ -26,11 +26,11 @@ all: cubical
 #     QuickCheck array bytestring containers deepseq directory filepath haskeline
 #     mtl old pretty random template terminfo time transformers unix
 # This is what I tried:
-#   cubical: $(INPUT:.hs=.o) $(GRAMMAR_OBJECT_FILES); $(GHC) -o $@ $(GHCOPTIONS) $^
+#   yacctt: $(INPUT:.hs=.o) $(GRAMMAR_OBJECT_FILES); $(GHC) -o $@ $(GHCOPTIONS) $^
 
-cubical: $(INPUT:.hs=.o) $(GRAMMAR_OBJECT_FILES)
+yacctt: $(INPUT:.hs=.o) $(GRAMMAR_OBJECT_FILES)
 	$(GHC) -M -dep-suffix "" $(INPUT) $(GRAMMAR_HS_FILES)
-	$(GHC) --make $(GHCOPTIONS) -o cubical Main
+	$(GHC) --make $(GHCOPTIONS) -o yacctt Main
 
 build-Makefile: $(INPUT) $(GRAMMAR_HS_FILES)
 	$(GHC) -M -dep-suffix "" $^
@@ -51,5 +51,5 @@ bnfc $(GRAMMAR_FILES): Exp.cf
 
 TAGS:; hasktags --etags $(INPUT) $(GRAMMAR)
 
-clean:; rm -rf Exp *.log *.aux *.hi *.o cubical TAGS Makefile.bak
+clean:; rm -rf Exp *.log *.aux *.hi *.o yacctt TAGS Makefile.bak
 git-clean:; git clean -Xdfq

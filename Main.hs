@@ -41,8 +41,8 @@ options = [ Option "d"  ["debug"]   (NoArg Debug)   "run in debugging mode"
 -- Version number, welcome message, usage and prompt strings
 version, welcome, usage, prompt :: String
 version = "1.0"
-welcome = "cubical, version: " ++ version ++ "  (:h for help)\n"
-usage   = "Usage: cubical [options] <file.ctt>\nOptions:"
+welcome = "yacctt, version: " ++ version ++ "  (:h for help)\n"
+usage   = "Usage: yacctt [options] <file.ctt>\nOptions:"
 prompt  = "> "
 
 lexer :: String -> [Token]

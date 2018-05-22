@@ -145,7 +145,8 @@ connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
                                                                   , (l = 1) -> p ] a) ]
                                                                   (coe 0->1 (<_> A) a))
 
---- hlevels
+
+-- h-levels
 
 prop (A : U) : U = (a b : A) -> Path A a b
 set (A : U) : U = (a b : A) -> prop (Path A a b)
@@ -279,16 +280,6 @@ equivInhPropToEquiv (A B : U) (f : equivInhProp A B) : equiv A B =
 
 idEquivInhProp (A : U) : equivInhProp A A = equivToEquivInhProp A A (idEquiv A)
 
--- ua (A B : U) (e : equiv A B) : Path U A B =
---   <i> V i A B (equivToEquivInhProp A B e)
-
--- uabeta (A B : U) (e : equiv A B) (a : A) :
---   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
---   <i> coe i->1 (<_> B) (e.1 a)
-
--- uabetaNeg (A B : U) (e : equiv A B) (b : B) : A =
---   coe 1->0 (ua A B e) b
-
 -- propIsEquiv without connections. normal form is big, but typechecks
 propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
   \(u0 u1 : isEquiv A B f) ->
@@ -341,7 +332,6 @@ iso (A B : U) : U = (f : A -> B) * (g : B -> A)
                   * (_ : (b : B) -> Path B (f (g b)) b)
                   * ((a : A) -> Path A (g (f a)) a)
                   
-
 lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
   Path (fiber A B i.1 b) f0 f1 =
   let f : A -> B = i.1
