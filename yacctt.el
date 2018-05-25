@@ -1,12 +1,12 @@
-;;; cubicaltt.el --- Mode for cubical type theory -*- lexical-binding: t -*-
-;; URL: https://github.com/mortberg/cubicaltt
+;;; yacctt.el --- Mode for cartesian cubical type theory -*- lexical-binding: t -*-
+;; URL: https://github.com/mortberg/yacctt
 ;; Package-version: 1.0
 ;; Package-Requires: ((emacs "24.1") (cl-lib "0.5"))
 ;; Keywords: languages
 
 ;; This file is not part of GNU Emacs.
 
-;; Copyright (c) 2015 Cyril Cohen, Thierry Coquand, Simon Huber, Anders Mörtberg
+;; Copyright (c) 2018 Anders Mörtberg and Carlo Angiuli
 
 ;; Permission is hereby granted, free of charge, to any person obtaining
 ;; a copy of this software and associated documentation files (the
@@ -29,7 +29,8 @@
 
 ;;; Commentary:
 ;; This package provides a major mode for editing proofs or programs
-;; in cubical, an implementation of cubical type theory.
+;; in yacctt, an experimental implementation of cartesian cubical type
+;; theory.
 
 
 ;;; Code:
@@ -39,52 +40,52 @@
 
 ;;;; Customization options
 
-(defgroup cubicaltt nil "Options for cubicaltt-mode for cubical type theory"
+(defgroup yacctt nil "Options for yacctt-mode for cartesian cubical type theory"
   :group 'languages
-  :prefix 'cubicaltt-
-  :tag "Cubical type theory")
+  :prefix 'yacctt-
+  :tag "Cartesian cubical type theory")
 
-(defcustom cubicaltt-command "cubical"
-  "The command to be run for cubical."
-  :group 'cubicaltt
+(defcustom yacctt-command "yacctt"
+  "The command to be run for yacctt."
+  :group 'yacctt
   :type 'string
-  :tag "Command for cubical"
-  :options '("cubical" "cabal exec cubical"))
+  :tag "Command for yacctt"
+  :options '("yacctt" "cabal exec yacctt"))
 
 ;;;; Syntax
 
-(defvar cubicaltt-keywords
+(defvar yacctt-keywords
   '("hdata" "data" "import" "mutual" "let" "in" "split"
     "with" "module" "where" "U" "opaque" "transparent" "transparent_all")
-  "Keywords for cubical.")
+  "Keywords for yacctt.")
 
-(defvar cubicaltt-special
+(defvar yacctt-special
   '("undefined" "primitive")
-  "Special operators for cubical.")
+  "Special operators for yacctt.")
 
-(defvar cubicaltt-keywords-regexp
-  (regexp-opt cubicaltt-keywords 'words)
-  "Regexp that recognizes keywords for cubical.")
+(defvar yacctt-keywords-regexp
+  (regexp-opt yacctt-keywords 'words)
+  "Regexp that recognizes keywords for yacctt.")
 
-(defvar cubicaltt-operators-regexp
+(defvar yacctt-operators-regexp
   (regexp-opt '(":" "->" "=" "|" "\\" "*" "_" "<" ">" "\\/" "/\\" "-" "@") t)
-  "Regexp that recognizes operators for cubical.")
+  "Regexp that recognizes operators for yacctt.")
 
-(defvar cubicaltt-special-regexp
-  (regexp-opt cubicaltt-special 'words)
-  "Regexp that recognizes special operators for cubical.")
+(defvar yacctt-special-regexp
+  (regexp-opt yacctt-special 'words)
+  "Regexp that recognizes special operators for yacctt.")
 
-(defvar cubicaltt-def-regexp "^[[:word:]']+"
-  "Regexp that recognizes the beginning of a cubical definition.")
+(defvar yacctt-def-regexp "^[[:word:]']+"
+  "Regexp that recognizes the beginning of a yacctt definition.")
 
-(defvar cubicaltt-font-lock-keywords
-  `((,cubicaltt-keywords-regexp . font-lock-type-face)
-    (,cubicaltt-operators-regexp . font-lock-variable-name-face)
-    (,cubicaltt-special-regexp . font-lock-warning-face)
-    (,cubicaltt-def-regexp . font-lock-function-name-face))
+(defvar yacctt-font-lock-keywords
+  `((,yacctt-keywords-regexp . font-lock-type-face)
+    (,yacctt-operators-regexp . font-lock-variable-name-face)
+    (,yacctt-special-regexp . font-lock-warning-face)
+    (,yacctt-def-regexp . font-lock-function-name-face))
   "Font-lock information, assigning each class of keyword a face.")
 
-(defvar cubicaltt-syntax-table
+(defvar yacctt-syntax-table
   (let ((st (make-syntax-table)))
     (modify-syntax-entry ?\{  "(}1nb" st)
     (modify-syntax-entry ?\}  "){4nb" st)
@@ -92,49 +93,49 @@
     (modify-syntax-entry ?\n ">" st)
     (modify-syntax-entry ?\\ "." st)
     st)
-  "The syntax table for cubical, with Haskell-style comments.")
+  "The syntax table for yacctt, with Haskell-style comments.")
 
 
 ;;;; The interactive toplevel
 
-(defvar cubicaltt-cubical-process nil
-  "The subprocess buffer for cubical.")
+(defvar yacctt-cubical-process nil
+  "The subprocess buffer for yacctt.")
 
-(defvar cubicaltt-loaded-buffer nil
-  "The currently-loaded buffer for cubical.
+(defvar yacctt-loaded-buffer nil
+  "The currently-loaded buffer for yacctt.
 
 If no buffer is loaded, then this variable is nil.")
 
-(defun cubicaltt-ensure-process ()
-  "Ensure that a process is running for cubical and return the process buffer."
-  (if (and cubicaltt-cubical-process (get-buffer-process cubicaltt-cubical-process))
-      cubicaltt-cubical-process
-    (let ((process (make-comint "cubical" cubicaltt-command)))
-      (setq cubicaltt-cubical-process process)
+(defun yacctt-ensure-process ()
+  "Ensure that a process is running for yacctt and return the process buffer."
+  (if (and yacctt-cubical-process (get-buffer-process yacctt-cubical-process))
+      yacctt-cubical-process
+    (let ((process (make-comint "yacctt" yacctt-command)))
+      (setq yacctt-cubical-process process)
       process)))
 
-(defun cubicaltt-load ()
-  "Start cubical if it is not running, and get the current buffer loaded."
+(defun yacctt-load ()
+  "Start yacctt if it is not running, and get the current buffer loaded."
   (interactive)
   (let ((file (buffer-file-name)))
     (unless file
       (error "The current buffer is not associated with a file"))
-    (let ((cubical-proc (cubicaltt-ensure-process))
+    (let ((yacctt-proc (yacctt-ensure-process))
           (dir (file-name-directory file))
           (f (file-name-nondirectory file)))
       (save-buffer)
       ;; Get in the right working directory. No space-escaping is
-      ;; necessary for cubical, which in fact expects filenames to be
+      ;; necessary for yacctt, which in fact expects filenames to be
       ;; written without quotes or space-escaping.
-      (comint-send-string cubical-proc (concat ":cd " dir "\n"))
+      (comint-send-string yacctt-proc (concat ":cd " dir "\n"))
       ;; Load the file
-      (comint-send-string cubical-proc (concat ":l " f "\n"))
+      (comint-send-string yacctt-proc (concat ":l " f "\n"))
       ;; Show the buffer
-      (pop-to-buffer cubical-proc '(display-buffer-use-some-window (inhibit-same-window . t))))))
+      (pop-to-buffer yacctt-proc '(display-buffer-use-some-window (inhibit-same-window . t))))))
 
 ;;;; Completion support
 
-(defvar cubicaltt--completion-regexp
+(defvar yacctt--completion-regexp
   "^\\(?1:[[:word:]']+\\) [:(]\\|^data \\(?1:[[:word:]']+\\)\\|=\\s-*\\(?1:[[:word:]']\\)\\||\\s-*\\(?1:[[:word:]']\\)"
   "Regexp for finding names to complete.
 
@@ -149,28 +150,28 @@ data <NAME>
 It is overly liberal, but it is better to have too many
 suggestions for completion rather than too few.")
 
-(defun cubicaltt-defined-names ()
+(defun yacctt-defined-names ()
   "Find all names defined in this buffer."
   (save-excursion
     (let (names)
       (goto-char (point-min))
-      (while (re-search-forward cubicaltt--completion-regexp nil t)
+      (while (re-search-forward yacctt--completion-regexp nil t)
         ;; Do not save if inside comment
         (unless (nth 4 (syntax-ppss))
           (push (match-string-no-properties 1) names)))
       names)))
 
-(defun cubicaltt-completion-at-point ()
-  "Attempt to perform completion for cubical's keywords and the definitions in this file."
+(defun yacctt-completion-at-point ()
+  "Attempt to perform completion for yacctt's keywords and the definitions in this file."
   (when (looking-back "\\w+" nil t)
     (let* ((match (match-string-no-properties 0))
            (start-pos (match-beginning 0))
            (end-pos (match-end 0))
            (candidates (cl-remove-if-not
                         (apply-partially #'string-prefix-p match)
-                        (append cubicaltt-keywords
-                                cubicaltt-special
-                                (cubicaltt-defined-names)))))
+                        (append yacctt-keywords
+                                yacctt-special
+                                (yacctt-defined-names)))))
       (if (null candidates)
           nil
         (list start-pos end-pos candidates)))))
@@ -178,25 +179,25 @@ suggestions for completion rather than too few.")
 ;;;; The mode itself
 
 ;;;###autoload
-(define-derived-mode cubicaltt-mode prog-mode
-  "ctt"
-  "Major mode for editing cubical type theory files."
+(define-derived-mode yacctt-mode prog-mode
+  "ytt"
+  "Major mode for editing yacctt type theory files."
 
-  :syntax-table cubicaltt-syntax-table
+  :syntax-table yacctt-syntax-table
 
-  ;; Make comment-dwim do the right thing for Cubical
+  ;; Make comment-dwim do the right thing for Yacctt
   (set (make-local-variable 'comment-start) "--")
   (set (make-local-variable 'comment-end) "")
 
   ;; Code for syntax highlighting
-  (setq font-lock-defaults '(cubicaltt-font-lock-keywords))
+  (setq font-lock-defaults '(yacctt-font-lock-keywords))
 
   ;; Bind mode-specific commands to keys
-  (define-key cubicaltt-mode-map (kbd "C-c C-l") 'cubicaltt-load)
+  (define-key yacctt-mode-map (kbd "C-c C-l") 'yacctt-load)
 
   ;; Install the completion handler
   (set (make-local-variable 'completion-at-point-functions)
-       '(cubicaltt-completion-at-point))
+       '(yacctt-completion-at-point))
 
   ;; Setup imenu, to allow tools such as imenu and Helm to jump
   ;; directly to names in the current buffer.
@@ -205,12 +206,12 @@ suggestions for completion rather than too few.")
          ("Datatypes" "^\\s-*data\\s-+\\(?1:[[:word:]']+\\)" 1)))
 
   ;; Clear memory
-  (setq cubicaltt-keywords-regexp nil)
-  (setq cubicaltt-operators-regexp nil)
-  (setq cubicaltt-special-regexp nil))
+  (setq yacctt-keywords-regexp nil)
+  (setq yacctt-operators-regexp nil)
+  (setq yacctt-special-regexp nil))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist '("\\.ctt\\'" . cubicaltt-mode))
+(add-to-list 'auto-mode-alist '("\\.ytt\\'" . yacctt-mode))
 
-(provide 'cubicaltt)
-;;; cubicaltt.el ends here
+(provide 'yacctt)
+;;; yacctt.el ends here
