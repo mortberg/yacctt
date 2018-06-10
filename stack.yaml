@@ -1,0 +1,11 @@
+resolver: lts-9.5
+
+packages:
+- .
+extra-deps:
+    - BNFC-2.8.1
+    - monad-gen-0.3.0.1
+    
+flags: {}
+
+extra-package-dbs: []
