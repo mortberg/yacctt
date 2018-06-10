@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module CTT where
 
+
+import Prelude hiding ((<>))
 import Control.Applicative
 import Data.List
 import Data.Maybe
