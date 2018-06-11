@@ -564,9 +564,8 @@ coeHComU (VPLam i (VHComU si s'i (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
             -- that I can take appropriate faces and do some optimization.
             -- z' is the name bound in bi.
             osys <- mapSystem (\alpha z' bi -> do
-                                  (bia,sra,s'ra,ma) <- (bi,sr,s'r,m) `face` alpha
-                                  ma' <- coe s'ra (Name z') (VPLam z' bia) ma
-                                  coe (Name z') sra (VPLam z' bia) ma') bisr
+                                  let m' = VCoe s'r (Name z') (VPLam z' bi) m
+                                  (VCoe (Name z') sr (VPLam z' bi) m') `face` alpha) bisr
             ocap <- cap sr s'r bisr m
             hcom s'r z ar osys ocap
 
@@ -575,15 +574,11 @@ coeHComU (VPLam i (VHComU si s'i (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
     otmsr <- otm sr
     -- TODO: psys is quite sketchy!
     psys <- mapSystem (\alpha x bi -> do
-                                (bia,sa,s'a,ra,ma) <- (bi,si,s'i,r,m) `face` alpha
-                                bia' <- bia @@ s'a
-                                ma' <- coe ra (Name x) (VPLam i bia') ma
-                                -- TODO: should we really take "_" here?
-                                coe s'a sa (VPLam (N "_") bia) ma') bs' -- NB: we only take (r'/x) on the faces!
+                                let m' = VCoe r (Name x) (VPLam i (VAppII bi s'i)) m
+                                (VCoe s'i si (VPLam (N "_") bi) m') `face` alpha) bs' -- NB: we only take (r'/x) on the faces!
 
     psys' <- if Name i `notElem` [si,s'i] && isConsistent (eqn (si,s'i))
-                then do (rs,as,ms) <- (r,ai,m) `face` (eqn (si,s'i))
-                        m' <- coe rs (Name i) (VPLam i as) ms
+                then do m' <- (VCoe r (Name i) (VPLam i ai) m) `face` (eqn (si,s'i))
                         return $ insertSystem (eqn (si,s'i),VPLam i m') psys
                 else return psys
     com r r' (VPLam i ai) psys' otmsr
@@ -639,10 +634,7 @@ coeHComU (VPLam i (VHComU si s'i (Sys bisi) ai)) r r' m = traceb "coe hcomU" $ d
   -- Like above we only use qtm when i does not occur in the faces
   uveci <- mapSystemNoEta (\alpha bi -> qtm alpha s'r' bi) bsi
   -- And in the case when i does occur in the face we do the simplification
-  uvec' <- mapSystemNoEta (\alpha bi -> do
-                              (bia,sa',ra,ra',ma) <- (bi,s'r',r,r',m) `face` alpha
-                              bia' <- bia @@ sa'
-                              coe ra ra' (VPLam i bia') ma) bs'
+  uvec' <- mapSystemNoEta (\alpha bi -> (VCoe r r' (VPLam i (VAppII bi s'r')) m) `face` alpha) bs'
   let uvec = mergeSystem uveci uvec'
 
   box sr' s'r' uvec outtm
@@ -660,9 +652,8 @@ hcomHComU (VHComU s s' bs a) r r' ns m = traceb "hcom hcomU" $ do
   -- Define F[c] and parametrize by z
   let ftm c z = do
         fsys <- mapSystem (\alpha z' bi -> do
-                              (s,s',bi) <- (s,s',bi) `face` alpha
-                              c' <- coe s' (Name z') (VPLam z' bi) c
-                              coe (Name z') s (VPLam z' bi) c') bs
+                              let c' = VCoe s' (Name z') (VPLam z' bi) c
+                              (VCoe (Name z') s (VPLam z' bi) c') `face` alpha) bs
         fcap <- cap s s' bs c
         hcom s' z a fsys fcap
 
@@ -687,8 +678,7 @@ hcomHComU (VHComU s s' bs a) r r' ns m = traceb "hcom hcomU" $ do
     hcom s s' a qsys otm
 
   -- inline P and optimize
-  outsys <- mapSystemNoEta (\alpha bj -> do (r,r',bj,ns,m) <- (r,r',bj,ns,m) `face` alpha
-                                            hcom r r' bj ns m) bs
+  outsys <- mapSystemNoEta (\alpha bj -> (VHCom r r' bj ns m) `face` alpha) bs
   box s s' outsys qtm
 hcomHComU _ _ _ _ _ = error "hcomHComU: case not implemented"
 
