@@ -468,11 +468,8 @@ vproj (Name i) o a b e = return $ VVproj i o a b e
 -- Coe for V-types
 vvcoe :: Val -> II -> II -> Val -> Eval Val
 vvcoe (VPLam i (VV j a b e)) r s m | i /= j = traceb "vvcoe i != j" $ do
-  -- Are all of these faces necessary:
-  (ej0,aj0) <- (equivFun e,a) `subst` (j,0)
-  vj0 <- join $ app ej0 <$> coe r (Name i) (VPLam i aj0) m
-  bj1 <- b `subst` (j,1)
-  vj1 <- coe r (Name i) (VPLam i bj1) m
+  vj0 <- VApp (equivFun e) (VCoe r (Name i) (VPLam i a) m) `subst` (j,0)
+  vj1 <- VCoe r (Name i) (VPLam i b) m `subst` (j,1)
   let tvec = mkSystem [(j~>0,VPLam i vj0),(j~>1,VPLam i vj1)]
   (ar,br,er) <- (a,b,e) `subst` (i,r)
   vr <- vproj (Name j) m ar br er
@@ -503,16 +500,13 @@ vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 vvhcom :: Val -> II -> II -> System Val -> Val -> Eval Val
 vvhcom (VV i a b e) r s us m = traceb "vvhcom" $ do
   j <- fresh
-  let otm y = hcom r y a us m
-  ti0 <- do
-    otmj <- otm (Name j)
-    VPLam j <$> (VApp (equivFun e) otmj) `subst` (i,0)  -- i can occur in e and a
+  -- i can occur in e and a
+  ti0 <- VPLam j <$> (VApp (equivFun e) (VHCom r (Name j) a us m)) `subst` (i,0)
   ti1 <- VPLam j <$> (VHCom r (Name j) b us m) `subst` (i,1)
   let tvec = [(i~>0,ti0),(i~>1,ti1)]
-  us' <- mapSystem (\alpha _ n -> do (i',n',a',b',e') <- (Name i,n,a,b,e) `face` alpha
-                                     vproj i' n' a' b' e') us
+  us' <- mapSystem (\alpha _ n -> (VVproj i n a b e) `face` alpha) us
   m' <- vproj (Name i) m a b e
-  vin (Name i) <$> otm s
+  vin (Name i) <$> hcom r s a us m
                <*> hcom r s b (insertsSystem tvec us') m'
 vvhcom _ _ _ _ _ = error "vvhcom: case not implemented"
 
