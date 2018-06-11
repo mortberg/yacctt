@@ -552,7 +552,7 @@ coe r s (VPLam i a) u = case a of
   v@VV{} -> vvcoe (VPLam i v) r s u
   Ter (Sum _ n nass) env
     | n `elem` ["nat","Z","bool"] -> return u -- hardcode hack
-    | otherwise -> error "coe sum"
+    | otherwise -> error $ "coe sum: " ++ show n
   Ter (HSum _ n nass) env
     | n `elem` ["S1","S2","S3"] -> return u   -- hardcode hack
     | otherwise -> error "coe hsum"
@@ -732,94 +732,115 @@ vvcoe (VPLam i (VV j a b e)) r s m | i /= j = traceb "vvcoe i != j" $ do
   vr <- vproj (Name j) m ar br er
   vin (Name j) <$> coe r s (VPLam i a) m
                <*> com r s (VPLam i b) tvec vr
+vvcoe (VPLam i (VV j a b e)) r s m | i == j = traceb "vvcoe i == j" $ do
+  (ar,br,er) <- (a,b,e) `subst` (i,r)
+  (as,bs,es) <- (a,b,e) `subst` (i,s)
+  m' <- vproj r m ar br er
+  n <- coe r s (VPLam i b) m'
+  c <- app (equivContr es) n
+  let fibty = VSigma as (VLam "a" as (VPathP (VPLam (N "_") bs) (VApp (VFst es) (VVar "a" as)) n))
+  -- This is really bad, how to implement it properly?
+  osys <- if r == 1
+             then return eps
+             else if r == 0
+                     then do or0 <- app (sndVal c) (VPair m n)
+                             return $ mkSystem [(r~>0,or0)]
+                     else do or0 <- (VApp (sndVal c) (VPair m n)) `face` (eqn (r,0))
+                             return $ mkSystem [(r~>0,or0)]
+  o <- hcom 1 0 fibty osys (fstVal c)
+  -- TODO:  we probably need to take appropriate faces in the branches
+  p <- hcom 1 0 bs (mkSystem [(s~>0,sndVal o),(s~>1,VPLam (N "_") n),(eqn (r,s),VPLam (N "_") m')]) n
+  return $ vin s (fstVal o) p
 
-vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s m = traceb "vvcoe 0->s" $ do
-  ej0 <- equivFun e `subst` (j,0)
-  ej0m <- app ej0 m
-  vin s m <$> coe 0 s (VPLam j b) ej0m
 
-vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = traceb "vvcoe 1->s" $ do
-  psys <- if s == 1
-             then return $ Triv (VPLam (N "_") m)
-             else do -- TODO: this is sketchy, but probably not the bug
-                     otm0 <- fstVal <$> join (app <$> equivContr e `subst` (j,0)
-                                    <*> coe 1 0 (VPLam j b) m)
-                     return $ mkSystem [(s~>0,sndVal otm0),(s~>1,VPLam (N "_") m)]
-  m' <- coe 1 s (VPLam j b) m
-  ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
-                         <*> pure psys
-                         <*> pure m'
-  otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
-                              <*> coe 1 s (VPLam j b) m)
-  return $ vin s (fstVal otm) ptm
+  
+-- vvcoe (VPLam _ (VV j a b e)) (Dir Zero) s m = traceb "vvcoe i->s" $ do
+--   ej0 <- equivFun e `subst` (j,0)
+--   ej0m <- app ej0 m
+--   vin s m <$> coe 0 s (VPLam j b) ej0m
 
-vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = traceb "vvcoe i->s" $ do
-  -- i = y
-  -- j = x
-  -- k = w
-  -- l = z
-  k <- fresh
-  l <- fresh
-  let (ak,bk,ek) = (a,b,e) `swap` (j,k)
-  -- i # m ?
-  m0 <- return m -- `subst` (i,0)
-  m1 <- return m -- `subst` (i,1)
+-- vvcoe (VPLam _ (VV j a b e)) (Dir One) s m = traceb "vvcoe 1->s" $ do
+--   psys <- if s == 1
+--              then return $ Triv (VPLam (N "_") m)
+--              else do -- TODO: this is sketchy, but probably not the bug
+--                      otm0 <- fstVal <$> join (app <$> equivContr e `subst` (j,0)
+--                                     <*> coe 1 0 (VPLam j b) m)
+--                      return $ mkSystem [(s~>0,sndVal otm0),(s~>1,VPLam (N "_") m)]
+--   m' <- coe 1 s (VPLam j b) m
+--   ptm <- join $ hcom 1 0 <$> b `subst` (j,s)
+--                          <*> pure psys
+--                          <*> pure m'
+--   otm <- fstVal <$> join (app <$> equivContr e `subst` (j,s)
+--                               <*> coe 1 s (VPLam j b) m)
+--   return $ vin s (fstVal otm) ptm
 
-  -- Define O_0 and O_1 separately (O_eps is only used under i=eps)
-  o0 <- do m0' <- coe 0 (Name k) vty m0 -- do we need subst (i,0) on vty as well?
-           vproj (Name k) m0' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
-  o1 <- do m1' <- coe 1 (Name k) vty m1 -- do we need subst (i,1) on vty as well?
-           vproj (Name k) m1' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
+-- vvcoe vty@(VPLam _ (VV j a b e)) (Name i) s m = traceb "vvcoe i->s" $ do
+--   -- i = y
+--   -- j = x
+--   -- k = w
+--   -- l = z
+--   k <- fresh
+--   l <- fresh
+--   let (ak,bk,ek) = (a,b,e) `swap` (j,k)
+--   -- i # m ?
+--   m0 <- return m -- `subst` (i,0)
+--   m1 <- return m -- `subst` (i,1)
 
-  let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
-  (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
-  ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
-                 <$> vproj (Name i) m ai bi ei
-  p0 <- ptm `subst` (j,0)
-  (a0,b0,e0) <- (a,b,e) `subst` (j,0)
-  let uvec eps t = do
-        e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
-        return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)] -- Do we have to take more faces?
-      qtm eps t = do
-        t' <- coe eps (Name i) (VPLam i a0) t -- Do we need to take any more faces here? (used to be VCoe)
-        p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
-        return $ VPair t' (VPLam l p0')
+--   -- Define O_0 and O_1 separately (O_eps is only used under i=eps)
+--   o0 <- do m0' <- coe 0 (Name k) vty m0 -- do we need subst (i,0) on vty as well?
+--            vproj (Name k) m0' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
+--   o1 <- do m1' <- coe 1 (Name k) vty m1 -- do we need subst (i,1) on vty as well?
+--            vproj (Name k) m1' ak bk ek  -- same for (ak,bk,ek)? (can probably share this with vty)
+
+--   let psys = mkSystem [(i~>0,VPLam k o0),(i~>1,VPLam k o1)]
+--   (ai,bi,ei) <- (a,b,e) `subst` (j,Name i)
+--   ptm <- join $ com (Name i) (Name j) (VPLam j b) psys
+--                  <$> vproj (Name i) m ai bi ei
+--   p0 <- ptm `subst` (j,0)
+--   (a0,b0,e0) <- (a,b,e) `subst` (j,0)
+--   let uvec eps t = do
+--         e0' <- join $ app (equivFun e0) <$> coe eps (Name i) (VPLam i a0) t
+--         return $ mkSystem [(l~>0,VPLam i e0'),(l~>1,VPLam i p0)] -- Do we have to take more faces?
+--       qtm eps t = do
+--         t' <- coe eps (Name i) (VPLam i a0) t -- Do we need to take any more faces here? (used to be VCoe)
+--         p0' <- join $ com eps (Name i) (VPLam i b0) <$> uvec eps t <*> p0 `subst` (i,eps)
+--         return $ VPair t' (VPLam l p0')
 
         
-  -- Old code for defining R as in Part 3:
-  -- e0p02 <- sndVal <$> app (equivContr e0) p0
-  -- e0p02q <- join $ app e0p02 <$> qtm 0 m0
-  -- foo <- coe 1 0 vty m
-  -- foo1 <- foo `subst` (i,1)
-  -- q1 <- qtm 1 foo1
-  -- rtm' <- app e0p02q q1
-  -- rtm <- rtm' @@ i
+--   -- Old code for defining R as in Part 3:
+--   -- e0p02 <- sndVal <$> app (equivContr e0) p0
+--   -- e0p02q <- join $ app e0p02 <$> qtm 0 m0
+--   -- foo <- coe 1 0 vty m
+--   -- foo1 <- foo `subst` (i,1)
+--   -- q1 <- qtm 1 foo1
+--   -- rtm' <- app e0p02q q1
+--   -- rtm <- rtm' @@ i
 
-  -- New version of R using RedPRL style equivalence
-  -- TODO: optimize!
-  e0p0 <- app (equivContr e0) p0
-  let e0p01 = fstVal e0p0 -- Center of contraction
-      e0p02 = sndVal e0p0 -- Proof that anything is equal to the center
-  -- Define R0
-  r0 <- join $ app e0p02 <$> qtm 0 m0
-  -- Define R1
-  foo <- coe 1 0 vty m
-  foo1 <- foo `subst` (i,1)
-  q1 <- qtm 1 foo1
-  r1 <- app e0p02 q1
-  -- We now want R0 = R1, we get this is a path in direction i (=y) as desired
-  let ty = VSigma a0 (VLam "a'" a0 (VPathP (VPLam (N "_") b0) (VApp (VFst e0) (VVar "a'" a0)) p0))
-  rtm <- hcom 1 0 ty (mkSystem [(i~>0,r0),(i~>1,r1)]) e0p01
+--   -- New version of R using RedPRL style equivalence
+--   -- TODO: optimize!
+--   e0p0 <- app (equivContr e0) p0
+--   let e0p01 = fstVal e0p0 -- Center of contraction
+--       e0p02 = sndVal e0p0 -- Proof that anything is equal to the center
+--   -- Define R0
+--   r0 <- join $ app e0p02 <$> qtm 0 m0
+--   -- Define R1
+--   foo <- coe 1 0 vty m
+--   foo1 <- foo `subst` (i,1)
+--   q1 <- qtm 1 foo1
+--   r1 <- app e0p02 q1
+--   -- We now want R0 = R1, we get this is a path in direction i (=y) as desired
+--   let ty = VSigma a0 (VLam "a'" a0 (VPathP (VPLam (N "_") b0) (VApp (VFst e0) (VVar "a'" a0)) p0))
+--   rtm <- hcom 1 0 ty (mkSystem [(i~>0,r0),(i~>1,r1)]) e0p01
 
-  (as,bs,es) <- (a,b,e) `subst` (j,s)
-  (o0s,o1s) <- (o0,o1) `subst` (k,s)
-  m' <- vproj (Name i) m as bs es -- Can m depend on i? This is used in the i=s case below
-  let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
-                      ,(i~>1,VPLam (N "_") o1s)
-                      ,(i~>s,VPLam (N "_") m')
-                      ,(s~>0,sndVal rtm)] -- can s occur in rtm?
-  ptms <- ptm `subst` (j,s)
-  vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
+--   (as,bs,es) <- (a,b,e) `subst` (j,s)
+--   (o0s,o1s) <- (o0,o1) `subst` (k,s)
+--   m' <- vproj (Name i) m as bs es -- Can m depend on i? This is used in the i=s case below
+--   let tvec = mkSystem [(i~>0,VPLam (N "_") o0s)
+--                       ,(i~>1,VPLam (N "_") o1s)
+--                       ,(i~>s,VPLam (N "_") m')
+--                       ,(s~>0,sndVal rtm)] -- can s occur in rtm?
+--   ptms <- ptm `subst` (j,s)
+--   vin s (fstVal rtm) <$> hcom 1 0 bs tvec ptms
 vvcoe _ _ _ _ = error "vvcoe: case not implemented"
 
 -- hcom for V-types
