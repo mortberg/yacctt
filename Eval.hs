@@ -482,14 +482,12 @@ vvcoe (VPLam i (VV j a b e)) r s m | i == j = traceb "vvcoe i == j" $ do
   n <- coe r s (VPLam i b) m'
   c <- app (equivContr es) n
   let fibty = VSigma as (VLam "a" as (VPathP (VPLam (N "_") bs) (VApp (VFst es) (VVar "a" as)) n))
-  -- This is really bad, how to implement it properly?
-  osys <- if r == 1
-             then return eps
-             else if r == 0
-                     then do or0 <- app (sndVal c) (VPair m n)
-                             return $ mkSystem [(r~>0,or0)]
-                     else do or0 <- (VApp (sndVal c) (VPair m n)) `face` (eqn (r,0))
-                             return $ mkSystem [(r~>0,or0)]
+  -- This is kinda bad, how to implement it properly?
+  osys <- case r of
+            Dir Zero -> Triv `liftM` app (sndVal c) (VPair m n)
+            Dir One -> return eps
+            _ -> do or0 <- (VApp (sndVal c) (VPair m n)) `face` (eqn (r,0))
+                    return $ mkSystem [(r~>0,or0)]
   o <- hcom 1 0 fibty osys (fstVal c)
   -- TODO:  we probably need to take appropriate faces in the branches
   p <- hcom 1 0 bs (mkSystem [(s~>0,sndVal o),(s~>1,VPLam (N "_") n),(eqn (r,s),VPLam (N "_") m')]) n
