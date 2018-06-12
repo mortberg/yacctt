@@ -65,6 +65,10 @@ compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
 sym (A : U) (a b : A) (p : Path A a b) : Path A b a =
   <i> hcom 0->1 A [ (i=0) -> p, (i=1) -> <_> a ] a
 
+symDep (A B : U) (P : Path U A B) (a : A) (b : B) (p : PathP P a b) :
+  (PathP (sym U A B P) b a) =
+  <i> com 0->1 (<j> hcom 0->j U [ (i=0) -> P, (i=1) -> <_> A ] A)
+        [ (i=0) -> p , (i=1) -> <_> a ] a
 
 singl (A : U) (a : A) : U = (x : A) * Path A a x
 

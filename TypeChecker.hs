@@ -591,6 +591,15 @@ infer e = case e of
     -- check that it's a system
     checkPLamSystem r u0 (constPath va) us
     return va
+  Com r s a us u0 -> do
+    checkII r
+    checkII s
+    checkPLam (constPath VU) a
+    va <- evalTyping a
+    var <- va @@@ r
+    check var u0
+    checkPLamSystem r u0 va us
+    va @@@ s
   Coe r s a u -> do
     checkII r
     checkII s
@@ -599,12 +608,6 @@ infer e = case e of
     var <- va @@@ r
     check var u
     va @@@ s
-  -- Comp a t0 ps -> do
-  --   (va0, va1) <- checkPLam (constPath VU) a
-  --   va <- evalTyping a
-  --   check va0 t0
-  --   checkPLamSystem t0 va ps
-  --   return va1
   PCon c a es phis -> do
     check VU a
     va <- evalTyping a

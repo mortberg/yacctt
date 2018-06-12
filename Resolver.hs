@@ -213,8 +213,8 @@ resolveExp e = case e of
       _ -> CTT.AppII <$> resolveExp t <*> resolveII phi
   PathP a u v   -> CTT.PathP <$> resolveExp a <*> resolveExp u <*> resolveExp v
   Coe r s u v -> CTT.Coe <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveExp v
-  HCom r s u ts v  -> CTT.HCom <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
-  -- Com r s u ts v  -> CTT.Com <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
+  HCom r s u ts v -> CTT.HCom <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
+  Com r s u ts v -> CTT.Com <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
   -- Glue u ts     -> CTT.Glue <$> resolveExp u <*> resolveSystem ts
   -- GlueElem u ts -> CTT.GlueElem <$> resolveExp u <*> resolveSystem ts
   -- UnGlueElem u v ts ->

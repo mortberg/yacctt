@@ -191,6 +191,8 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   AppII e phi           -> join $ (@@) <$> eval rho e <*> pure (evalII rho phi)
   HCom r s a us u0      ->
     join $ hcom (evalII rho r) (evalII rho s) <$> eval rho a <*> evalSystem rho us <*> eval rho u0
+  Com r s a us u0      ->
+    join $ com (evalII rho r) (evalII rho s) <$> eval rho a <*> evalSystem rho us <*> eval rho u0
   Coe r s a t           -> join $ coe (evalII rho r) (evalII rho s) <$> eval rho a <*> eval rho t
   -- Comp a t0 ts       -> compLine (eval rho a) (eval rho t0) (evalSystem rho ts)
   V r a b e             -> vtype (evalII rho r) <$> eval rho a <*> eval rho b <*> eval rho e

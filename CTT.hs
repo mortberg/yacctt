@@ -116,8 +116,8 @@ data Ter = Pi Ter
          | Coe II II Ter Ter
            -- Homogeneous Kan composition
          | HCom II II Ter (System Ter) Ter
-           -- Kan composition
-         -- | Com II II Ter (System Ter) Ter
+           -- Heterogeneous Kan composition (derived)
+         | Com II II Ter (System Ter) Ter
 
            -- V-types
          | V II Ter Ter Ter -- V r A B E    (where E : A ~= B)
@@ -394,6 +394,8 @@ showTer v = case v of
   PathP e0 e1 e2       -> text "PathP" <+> showTers [e0,e1,e2]
   PLam i e             -> char '<' <> text (show i) <> char '>' <+> showTer e
   AppII e phi          -> showTer1 e <+> char '@' <+> showII phi
+  Com r s a ts t      ->
+    text "com" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
   HCom r s a ts t      ->
     text "hcom" <+> showII r <> text "->" <> showII s <+> showTer1 a <+> text (show ts) <+> showTer1 t
   Coe r s e t0         ->
