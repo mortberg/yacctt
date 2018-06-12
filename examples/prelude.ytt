@@ -111,7 +111,6 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
   -- substEq (singl A a) T (a, refl A a) d
   --   where T (z : singl A a) : U = C (z.1) (z.2)
 
-
 -- Slicker proof of J.
 -- Inspired by https://github.com/RedPRL/sml-redprl/blob/master/example/J.prl
 J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
@@ -119,11 +118,17 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
   coe 0->1 (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> p] a)
                   (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> p] a)) d
 
--- This does not work!
--- JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
---   : Path (C a (<_> a)) d (J A a C d a (<_> a)) =
---   <k> coe 0->k (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> <_> a] a)
---                       (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> <_> a] a)) d
+-- J and JEq keep repeating the same hcoms and coes...
+-- I conjecture that line types would significantly simplify them.
+JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
+   : Path (C a (<_> a)) (J A a C d a (<_> a)) d =
+   <k> com 0->1 (<i> C (hcom 0->1 A [(k=0) -> <j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
+                                    ,(k=1) -> <_> a,(i=0) -> <_> a,(i=1) -> <_> a] a)
+                       (<j> hcom 0->j A [(k=0) -> <j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
+                                    ,(k=1) -> <_> a,(i=0) -> <_> a,(i=1) -> <_> a] a))
+       [(k=0) -> <l> coe 0->l (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> <_> a] a)
+                                     (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> <_> a] a)) d
+       ,(k=1) -> <_> d] d
 
 connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
   PathP (<i> Path A a (p @ i)) (<_> a) p = \(b : A) -> \(p : PathP (<_> A) a b) ->
