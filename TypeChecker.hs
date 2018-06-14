@@ -242,6 +242,12 @@ check a t = case (a,t) of
       throwError $ "Right endpoints don't match for \n" ++ show e ++ "\ngot\n" ++
                    show u1 ++ "\nbut expected\n" ++ show a1 ++
                    "\n\nNormal forms:\n" ++ show nu1 ++ "\nand\n" ++ show na1
+  (VU,LineP a) -> do
+    checkPLam (constPath VU) a
+    return ()
+  (VLineP a,PLam _ e) -> do
+    checkPLam a t
+    return ()
   (VU,V r a b e) -> do
     checkII r
     check VU b
@@ -496,6 +502,12 @@ checkPLam v t = do
       unlessM (a === v) $ throwError (
         "checkPLam\n" ++ show v ++ "\n/=\n" ++ show a)
       return (a0,a1)
+    VLineP a -> do
+      unlessM (a === v) $ throwError (
+        "checkPLam\n" ++ show v ++ "\n/=\n" ++ show a)
+      -- vt0 <- vt @@@ Dir Zero
+      -- vt1 <- vt @@@ Dir One
+      return (VAppII vt 0,VAppII vt 1)
     _ -> throwError $ show vt ++ " is not a path"
 
 checkPLamSystem :: II -> Ter -> Val -> System Ter -> Typing ()
@@ -576,11 +588,12 @@ infer e = case e of
   --   check vgl e
   --   va <- evalTyping a
   --   return va
-  AppII e phi -> do
-    checkII phi
+  AppII e r -> do
+    checkII r
     t <- infer e
     case t of
-      VPathP a _ _ -> a @@@ phi
+      VPathP a _ _ -> a @@@ r
+      VLineP a -> a @@@ r
       _ -> throwError (show e ++ " is not a path")
   HCom r s a us u0 -> do
     checkII r

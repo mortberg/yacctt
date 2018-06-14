@@ -71,6 +71,7 @@ instance Nominal Val where
     Ter _ e           -> occurs x e
     VPi u v           -> occurs x (u,v)
     VPathP a v0 v1    -> occurs x [a,v0,v1]
+    VLineP a          -> occurs x a
     VPLam i v         -> if x == i then False else occurs x v
     VSigma u v        -> occurs x (u,v)
     VPair u v         -> occurs x (u,v)
@@ -99,6 +100,7 @@ instance Nominal Val where
     Ter t e                        -> Ter t <$> subst e (i,r)
     VPi a f                        -> VPi <$> subst a (i,r) <*> subst f (i,r)
     VPathP a u v                   -> VPathP <$> subst a (i,r) <*> subst u (i,r) <*> subst v (i,r)
+    VLineP a                       -> VLineP <$> subst a (i,r)
     VPLam j v | j == i             -> return u
               | not (j `occurs` r) -> VPLam j <$> subst v (i,r)
               | otherwise          -> do
@@ -137,6 +139,7 @@ instance Nominal Val where
          Ter t e           -> Ter t (sw e)
          VPi a f           -> VPi (sw a) (sw f)
          VPathP a u v      -> VPathP (sw a) (sw u) (sw v)
+         VLineP a          -> VLineP (sw a)
          VPLam k v         -> VPLam (swapName k ij) (sw v)
          VSigma a f        -> VSigma (sw a) (sw f)
          VPair u v         -> VPair (sw u) (sw v)
@@ -185,6 +188,7 @@ eval rho@(Env (_,_,_,Nameless os)) v = case v of
   Undef{}               -> return $ Ter v rho
   Hole{}                -> return $ Ter v rho
   PathP a e0 e1         -> VPathP <$> eval rho a <*> eval rho e0 <*> eval rho e1
+  LineP a               -> VLineP <$> eval rho a
   PLam i t              -> do
     j <- fresh
     VPLam j <$> eval (sub (i,Name j) rho) t
@@ -289,9 +293,10 @@ inferType v = case v of
     VPi _ f -> app f t1
     ty      -> error $ "inferType: expected Pi type for " ++ show v
                ++ ", got " ++ show ty
-  VAppII t phi -> inferType t >>= \t' -> case t' of
-    VPathP a _ _ -> a @@ phi
-    ty         -> error $ "inferType: expected PathP type for " ++ show v
+  VAppII t r -> inferType t >>= \t' -> case t' of
+    VPathP a _ _ -> a @@ r
+    VLineP a -> a @@ r
+    ty         -> error $ "inferType: expected PathP/LineP type for " ++ show v
                   ++ ", got " ++ show ty
   VHCom r s a _ _ -> return a
   VCoe r s a _ -> a @@ s
@@ -365,6 +370,12 @@ hcom r s a us u0   = case a of
     aj <- a @@ j
     u0j <- u0 @@ j
     VPLam j <$> hcom r s aj us' u0j
+  VLineP a -> traceb "hcom line" $ do
+    j <- fresh
+    us' <- mapSystemUnsafe (const (@@ j)) us
+    aj <- a @@ j
+    u0j <- u0 @@ j
+    VPLam j <$> hcom r s aj us' u0j
   VSigma a b -> traceb "hcom sigma" $ do
     j <- fresh
     us1 <- mapSystemUnsafe (const (return . fstVal)) us
@@ -396,6 +407,11 @@ coe r s (VPLam i a) u = case a of
     j <- fresh
     aij <- VPLam i <$> (a @@ j)
     out <- join $ com r s aij (mkSystem [(j~>0,VPLam i v0),(j~>1,VPLam i v1)]) <$> u @@ j
+    return $ VPLam j out
+  VLineP a  -> traceb "coe line" $ do
+    j <- fresh
+    aij <- VPLam i <$> (a @@ j)
+    out <- join $ coe r s aij <$> u @@ j
     return $ VPLam j out
   VSigma a b -> traceb "coe sigma" $ do
     j <- fresh
@@ -749,6 +765,7 @@ instance Convertible Val where
       (VOpaque x _, VOpaque x' _)                     -> return $ x == x'
       (VVar x _, VVar x' _)                           -> return $ x == x'
       (VPathP a b c,VPathP a' b' c')                  -> conv ns a a' <&&> conv ns b b' <&&> conv ns c c'
+      (VLineP a,VLineP a')                            -> conv ns a a'
       (VPLam i a,VPLam i' a')                         -> conv ns (a `swap` (i,j)) (a' `swap` (i',j))
       (VPLam i a,p')                                  -> join $ conv ns (a `swap` (i,j)) <$> p' @@ j
       (p,VPLam i' a')                                 -> join $ conv ns <$> p @@ j <*> pure (a' `swap` (i',j))
@@ -846,6 +863,7 @@ instance Normal Val where
     VCon n us              -> VCon n <$> normal ns us
     VPCon n u us phis      -> VPCon n <$> normal ns u <*> normal ns us <*> pure phis
     VPathP a u0 u1         -> VPathP <$> normal ns a <*> normal ns u0 <*> normal ns u1
+    VLineP a               -> VLineP <$> normal ns a
     VPLam i u              -> VPLam i <$> normal ns u
     VCoe r s a u           -> VCoe <$> normal ns r <*> normal ns s <*> normal ns a <*> normal ns u
     VHCom r s u vs v       -> VHCom <$> normal ns r <*> normal ns s <*> normal ns u <*> normal ns vs <*> normal ns v

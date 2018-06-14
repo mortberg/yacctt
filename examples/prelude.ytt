@@ -1,6 +1,7 @@
 module prelude where
 
 Path (A : U) (a0 a1 : A) : U = PathP (<i> A) a0 a1
+Line (A : U) : U = LineP (<i> A)
 
 --         u
 --    a0 -----> a1
@@ -154,6 +155,14 @@ connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
                                                                   , (l = 1) -> p ] a) ]
                                                                   (coe 0->1 (<_> A) a))
 
+
+-- line types
+
+reflLine (A : U) (a : A) : Line A = <_> a
+
+test (A B : U) (P : Path U A B) (a : P @ 0) : P @ 1 = coe 0->1 P a
+
+test' (P : Line U) (a : P @ 0) : P @ 1 = coe 0->1 P a
 
 -- h-levels
 

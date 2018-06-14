@@ -211,7 +211,8 @@ resolveExp e = case e of
         CTT.PCon (unAIdent n) <$> resolveExp a <*> mapM resolveExp xs
                               <*> mapM resolveII phis
       _ -> CTT.AppII <$> resolveExp t <*> resolveII phi
-  PathP a u v   -> CTT.PathP <$> resolveExp a <*> resolveExp u <*> resolveExp v
+  PathP a u v -> CTT.PathP <$> resolveExp a <*> resolveExp u <*> resolveExp v
+  LineP a -> CTT.LineP <$> resolveExp a
   Coe r s u v -> CTT.Coe <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveExp v
   HCom r s u ts v -> CTT.HCom <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v
   Com r s u ts v -> CTT.Com <$> resolveII r <*> resolveII s <*> resolveExp u <*> resolveSystem ts <*> resolveExp v

@@ -108,8 +108,9 @@ data Ter = Pi Ter
            -- undefined and holes
          | Undef Loc Ter -- Location and type
          | Hole Loc
-           -- Path types
+           -- Path and line types
          | PathP Ter Ter Ter
+         | LineP Ter
          | PLam Name Ter
          | AppII Ter II
            -- Coe
@@ -162,6 +163,7 @@ data Val = VU
 
            -- Path values
          | VPathP Val Val Val
+         | VLineP Val
          | VPLam Name Val
 
            -- Homogeneous composition; the type is constant
@@ -392,6 +394,7 @@ showTer v = case v of
   Undef{}              -> text "undefined"
   Hole{}               -> text "?"
   PathP e0 e1 e2       -> text "PathP" <+> showTers [e0,e1,e2]
+  LineP e              -> text "LineP" <+> showTer e
   PLam i e             -> char '<' <> text (show i) <> char '>' <+> showTer e
   AppII e phi          -> showTer1 e <+> char '@' <+> showII phi
   Com r s a ts t      ->
@@ -466,6 +469,7 @@ showVal v = case v of
   VFst u                 -> showVal1 u <> text ".1"
   VSnd u                 -> showVal1 u <> text ".2"
   VPathP v0 v1 v2        -> text "PathP" <+> showVals [v0,v1,v2]
+  VLineP v               -> text "LineP" <+> showVal v
   VAppII v phi           -> showVal v <+> char '@' <+> showII phi
   VV i a b e             -> text "V" <+> text (show i) <+> showVals [a,b,e]
   VVin i m n             -> text "Vin" <+> text (show i) <+> showVals [m,n]
