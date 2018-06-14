@@ -16,7 +16,9 @@ Square (A : U) (a0 a1 b0 b1 : A)
                (r0 : Path A a0 b0) (r1 : Path A a1 b1) : U
  = PathP (<i> (PathP (<j> A) (u @ i) (v @ i))) r0 r1
 
-refl (A : U) (a : A) : Path A a a = <i> a
+refl (A : U) (a : A) : Path A a a = <_> a
+
+reflLine (A : U) (a : A) : Line A = <_> a
 
 testEta (A : U) (a b : A) (p : Path A a b) : Path (Path A a b) p p =
   refl (Path A a b) (<i> p @ i)
@@ -30,6 +32,8 @@ funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
 
 trans (A B : U) (p : Path U A B) (a : A) : B = coe 0->1 p a
 transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1->0 p b
+
+transLine (p : Line U) (a : p @ 0) : p @ 1 = coe 0->1 p a
 
 transFill (A B : U) (p : Path U A B) (a : A) :
   PathP p a (trans A B p a) = <i> coe 0->i p a
@@ -77,13 +81,12 @@ singl (A : U) (a : A) : U = (x : A) * Path A a x
 -- Inspired by: https://github.com/RedPRL/sml-redprl/blob/master/example/connection.prl
 connAnd (A : U) (a b : A) (p : Path A a b) :
   PathP (<i> Path A a (p @ i)) (<_> a) p =
-  <i j> hcom 0->1 A [ (i=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
-                    , (i=1) -> <k> hcom 1->j A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
-                    , (j=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
-                    , (j=1) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+  <i j> hcom 0->1 A [ (i=0) -> connAndWeak @ 0 , (i=1) -> connAndWeak @ j
+                    , (j=0) -> connAndWeak @ 0 , (j=1) -> connAndWeak @ i
                     -- The diagonal is not strictly necessary, but it is cool!
-                    , (i=j) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
-                    ] a
+                    , (i=j) -> connAndWeak @ i ] a
+  where connAndWeak : Line (Line A) =
+          <l k> hcom 1->l A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
 
 -- The diagonal of connAnd is really p!
 connAndDiag (A : U) (a b : A) (p : Path A a b) :
@@ -91,12 +94,12 @@ connAndDiag (A : U) (a b : A) (p : Path A a b) :
 
 connOr (A : U) (a b : A) (p : Path A a b) :
   PathP (<i> Path A (p @ i) b) p (<_> b) =
-  <i j> hcom 1->0 A [ (i=0) -> <k> hcom 0->j A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
-                    , (i=1) -> <k> hcom 0->1 A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
-                    , (j=0) -> <k> hcom 0->i A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
-                    , (j=1) -> <k> hcom 0->1 A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
-                    , (i=j) -> <k> hcom 0->i A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
-                    ] b
+  <i j> hcom 1->0 A [ (i=0) -> connOrWeak @ j , (i=1) -> connOrWeak @ 1
+                    , (j=0) -> connOrWeak @ i , (j=1) -> connOrWeak @ 1
+                    , (i=j) -> connOrWeak @ i ] b
+  where connOrWeak : Line (Line A) =
+          <l k> hcom 0->l A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+
 
 contrSingl (A : U) (a b : A) (p : Path A a b) :
   Path (singl A a) (a,<_> a) (b,p) = <i> (p @ i, connAnd A a b p @ i)
@@ -112,24 +115,24 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
   -- substEq (singl A a) T (a, refl A a) d
   --   where T (z : singl A a) : U = C (z.1) (z.2)
 
--- Slicker proof of J.
+-- Slicker proof of J, using a different weak 'and' connection.
 -- Inspired by https://github.com/RedPRL/sml-redprl/blob/master/example/J.prl
 J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
   (x : A) (p : Path A a x) : C x p =
-  coe 0->1 (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> p] a)
-                  (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> p] a)) d
+  coe 0->1 (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
+  where sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> p] a
 
--- J and JEq keep repeating the same hcoms and coes...
--- I conjecture that line types would significantly simplify them.
 JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
    : Path (C a (<_> a)) (J A a C d a (<_> a)) d =
-   <k> com 0->1 (<i> C (hcom 0->1 A [(k=0) -> <j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
-                                    ,(k=1) -> <_> a,(i=0) -> <_> a,(i=1) -> <_> a] a)
-                       (<j> hcom 0->j A [(k=0) -> <j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
-                                    ,(k=1) -> <_> a,(i=0) -> <_> a,(i=1) -> <_> a] a))
-       [(k=0) -> <l> coe 0->l (<i> C (hcom 0->1 A [(i=0) -> <_> a,(i=1) -> <_> a] a)
-                                     (<j> hcom 0->j A [(i=0) -> <_> a, (i=1) -> <_> a] a)) d
+   <k> com 0->1 (<i> C (cube @ i @ 1 @ k) (<j> cube @ i @ j @ k))
+       [(k=0) -> <l> coe 0->l (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
        ,(k=1) -> <_> d] d
+  where sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
+        cube : Line (Line (Line A)) =
+          <i j k> hcom 0->j A [(k=0) -> sq @ i
+                              ,(k=1) -> <_> a
+                              ,(i=0) -> <_> a
+                              ,(i=1) -> <_> a] a
 
 connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
   PathP (<i> Path A a (p @ i)) (<_> a) p = \(b : A) -> \(p : PathP (<_> A) a b) ->
@@ -155,14 +158,6 @@ connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
                                                                   , (l = 1) -> p ] a) ]
                                                                   (coe 0->1 (<_> A) a))
 
-
--- line types
-
-reflLine (A : U) (a : A) : Line A = <_> a
-
-test (A B : U) (P : Path U A B) (a : P @ 0) : P @ 1 = coe 0->1 P a
-
-test' (P : Line U) (a : P @ 0) : P @ 1 = coe 0->1 P a
 
 -- h-levels
 

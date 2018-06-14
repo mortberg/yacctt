@@ -106,20 +106,17 @@ univalenceAlt (B : U) : isContr ((A : U) * equiv A B) =
          <i> let VB : U = V i w.1 B w.2
                  projB (g : VB) : B = Vproj i g w.1 B w.2
                  projBisEquiv : isEquiv VB B projB =
-                   \(b : B) -> let ctr : fiber VB B projB b =
-                                     (Vin i (w.2.2 b).1.1
-                                            (hcom 1->0 B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b)
-                                     ,<j> hcom 1->j B [(i=0) -> (w.2.2 b).1.2,(i=1) -> <_> b] b)
+                   \(b : B) -> let ctrB : Line B =
+                                     <j> hcom 1->j B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b
+                                   ctr : fiber VB B projB b =
+                                     (Vin i (w.2.2 b).1.1 (ctrB @ 0), <j> ctrB @ j)
                                    contr (v : fiber VB B projB b) : Path (fiber VB B projB b) v ctr =
-                                     <j> (Vin i ((w.2.2 b).2 v @ j).1
-                                                (hcom 1->0 B [(i=0) -> ((w.2.2 b).2 v @ j).2
-                                                             ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
-                                                             ,(j=0) -> v.2
-                                                             ,(j=1) -> <k> hcom 1->k B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b] b)
-                                         ,<l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v @ j).2
-                                                          ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
-                                                          ,(j=0) -> v.2
-                                                          ,(j=1) -> <k> hcom 1->k B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b] b)
+                                     <j> let filler : Line B =
+                                               <l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v @ j).2
+                                                               ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
+                                                               ,(j=0) -> v.2
+                                                               ,(j=1) -> ctrB] b
+                                         in (Vin i ((w.2.2 b).2 v @ j).1 (filler @ 0),<l> filler @ l)
                                in (ctr,contr)
              in (VB,projB,projBisEquiv)
    in goal)
