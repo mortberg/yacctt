@@ -3,7 +3,6 @@ module univalence where
 import prelude
 
 ua (A B : U) (e : equiv A B) : Path U A B = <i> V i A B e
-  -- <i> V i A B (equivToEquivInhProp A B e)
 
 uabeta (A B : U) (e : equiv A B) (a : A) :
   Path B (coe 0->1 (ua A B e) a) (e.1 a) =
@@ -66,39 +65,6 @@ idEquivConnOr (B : U) : equiv B B =
                ,\(v : fiber B B (idfun B) b) ->
                   <i> (v.2 @ i,<j> connOr B v.1 b v.2 @ i @ j)))
 
--- Direct proof of univalence using the fact that Vproj is an equivalence
--- univalence (A : U) : isContr ((B : U) * equiv A B) =
-
--- isContr' (A : U) : U = (x : A) * ((y : A) -> Path A x y)
-
--- univalenceAlt (A : U) : isContr' ((B : U) * equiv A B) =
---   ((A,idEquivConnOr A)
---   ,\(w : (B : U) * equiv A B) ->
---    let goal : Path ((B : U) * equiv A B) (A,idEquivConnOr A) w = undefined
---        goal' : Path ((B : U) * equiv A B) (A,idEquivConnOr A) w =
---          <i> let B : U = w.1
---                  VB : U = V i A B w.2
---                  projB (g : VB) : B = Vproj i g A B w.2
---                  projBisEquiv : isEquiv VB B projB =
---                    \(b : B) -> let ctr : fiber VB B projB b =
---                                      (Vin i (w.2.2 b).1.1
---                                             (hcom 1->0 B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b)
---                                      ,<j> hcom 1->j B [(i=0) -> (w.2.2 b).1.2,(i=1) -> <_> b] b)
---                                    contr (v : fiber VB B projB b) : Path (fiber VB B projB b) v ctr =
---                                      <j> (Vin i ((w.2.2 b).2 v @ j).1
---                                                 (hcom 1->0 B [(i=0) -> ((w.2.2 b).2 v @ j).2
---                                                              ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                                              ,(j=0) -> v.2
---                                                              ,(j=1) -> <k> hcom 1->k B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b] b)
---                                          ,<l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v @ j).2
---                                                           ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                                           ,(j=0) -> v.2
---                                                           ,(j=1) -> <k> hcom 1->k B [(i=0) -> (w.2.2 b).1.2, (i=1) -> <_> b] b] b)
---                                in (ctr,contr)
---              in (VB,projB,projBisEquiv)
---    in goal)
-
-
 univalenceAlt (B : U) : isContr ((A : U) * equiv A B) =
  ((B,idEquivConnOr B)
  ,\(w : (A : U) * equiv A B) ->
@@ -121,34 +87,3 @@ univalenceAlt (B : U) : isContr ((A : U) * equiv A B) =
              in (VB,projB,projBisEquiv)
    in goal)
 
-
--- Attempt to switch to equivInhProp
--- univalenceAlt (B : U) : isContr ((X : U) * equivInhProp X B) =
---  ((B,idEquivInhProp B)
---  ,\(w : (X : U) * equivInhProp X B) ->
---    let goal : Path ((X : U) * equivInhProp X B) w (B,idEquivInhProp B) = undefined
---        foo : Path U U U =
---          <i> let VB : U = V i w.1 B w.2
---                  projB (g : VB) : B = Vproj i g w.1 B w.2
---                  projBisEquiv : isEquivInhProp VB B projB =
---                    \(b : B) -> let ctr : fiber VB B projB b =
---                                      (Vin i (w.2.2 b).1.1
---                                             (hcom 1->0 B [(i=1) -> <_> b
---                                                          ,(i=0) -> (w.2.2 b).1.2] b)
---                                      ,<j> hcom 1->j B [(i=1) -> <_> b
---                                                       ,(i=0) -> (w.2.2 b).1.2] b)
---                                    contr (v1 v2 : fiber VB B projB b) : Path (fiber VB B projB b) v1 v2 = undefined
---                                      -- <j> (Vin i ((w.2.2 b).2 v (w.2.2 b).1 @ j).1
---                                      --            (hcom 1->0 B [(i=0) -> ((w.2.2 b).2 v (w.2.2 b).1 @ j).2
---                                      --                         ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                      --                         ,(j=0) -> v.2
---                                      --                         ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
---                                      --                                                   ,(i=0) -> (w.2.2 b).1.2] b] b)
---                                      --     ,<l> hcom 1->l B [(i=0) -> ((w.2.2 b).2 v (w.2.2 b).1 @ j).2
---                                      --                      ,(i=1) -> <k> connOr B v.1 b v.2 @ j @ k
---                                      --                      ,(j=0) -> v.2
---                                      --                      ,(j=1) -> <k> hcom 1->k B [(i=1) -> <_> b
---                                      --                                                ,(i=0) -> (w.2.2 b).1.2] b] b)
---                                in (ctr,contr)
---              in U
---    in goal)
