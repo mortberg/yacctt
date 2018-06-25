@@ -125,7 +125,7 @@ J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
 JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
    : Path (C a (<_> a)) (J A a C d a (<_> a)) d =
    <k> com 0->1 (<i> C (cube @ i @ 1 @ k) (<j> cube @ i @ j @ k))
-       [(k=0) -> <l> coe 0->l (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
+       [(k=0) -> <i> coe 0->i (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
        ,(k=1) -> <_> d] d
   where sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
         cube : Line (Line (Line A)) =
@@ -133,6 +133,36 @@ JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
                               ,(k=1) -> <_> a
                               ,(i=0) -> <_> a
                               ,(i=1) -> <_> a] a
+
+-- Longform, uncurried version of the above J/JEq proof.
+
+BP (A : U) (a : A) : U = (b : A) * Path A a b
+
+bpRefl (A : U) (a : A) : BP A a = (a , <_> a)
+
+bpContr (A : U) (a : A) (p : BP A a) : Path (BP A a) (bpRefl A a) p =
+  let sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> p.2] a
+  in <i> (sq @ i @ 1 , <j> sq @ i @ j)
+
+bpContrRefl (A : U) (a : A) :
+  Path (Path (BP A a) (bpRefl A a) (bpRefl A a))
+    (bpContr A a (bpRefl A a))
+    (<_> bpRefl A a) =
+  <k i> (cube @ i @ 1 @ k , <j> cube @ i @ j @ k)
+  where cube : Line (Line (Line A)) =
+          <i j k> hcom 0->j A [(k=0) -> (bpContr A a (bpRefl A a) @ i).2
+                              ,(k=1) -> <_> a
+                              ,(i=0) -> <_> a
+                              ,(i=1) -> <_> a] a
+
+J' (A : U) (a : A) (C : BP A a -> U) (c : C (bpRefl A a)) (p : BP A a) : C p =
+  subst (BP A a) C (bpRefl A a) p (bpContr A a p) c
+
+JEq' (A : U) (a : A) (C : BP A a -> U) (c : C (bpRefl A a))
+   : Path (C (bpRefl A a)) (J' A a C c (bpRefl A a)) c =
+  <k> com 0->1 (<i> C (bpContrRefl A a @ k @ i))
+      [(k=0) -> <i> coe 0->i (<i> C (bpContr A a (bpRefl A a) @ i)) c
+      ,(k=1) -> <_> c] c
 
 connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
   PathP (<i> Path A a (p @ i)) (<_> a) p = \(b : A) -> \(p : PathP (<_> A) a b) ->
