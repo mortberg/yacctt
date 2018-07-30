@@ -374,7 +374,7 @@ propIsEquivDirect (A B : U) (f : A -> B) : prop (isEquiv A B f) =
 iso (A B : U) : U = (f : A -> B) * (g : B -> A)
                   * (_ : (b : B) -> Path B (f (g b)) b)
                   * ((a : A) -> Path A (g (f a)) a)
-                  
+
 lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
   Path (fiber A B i.1 b) f0 f1 =
   let f : A -> B = i.1
@@ -407,6 +407,38 @@ lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
                           (f (hcom 1->0 A [(i=0) -> sq0 @ j
                                           ,(i=1) -> sq1 @ j
                                           ,(j=0) -> gf (l2 @ i)
+                                          ,(j=1) -> <_> g b]
+                                          (sq2 @ i @ j))))
+
+-- Version of lemIso with heavy use of line types:
+lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
+  Path (fiber A B i.1 b) f0 f1 =
+  let f : A -> B = i.1
+      g : B -> A = i.2.1
+      fg : (b : B) -> Path B (f (g b)) b = i.2.2.1
+      gf : (a : A) -> Path A (g (f a)) a = i.2.2.2
+      x0 : A = f0.1
+      p0 : Path B (f x0) b = f0.2
+      x1 : A = f1.1
+      p1 : Path B (f x1) b = f1.2
+
+      sq0 : Line (Line A) =
+        <i j> hcom 0->j A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+
+      sq1 : Line (Line A) =
+        <i j> hcom 0->j A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+
+      sq2 : Line (Line A) =
+        <i j> hcom 1->j A [(i=0) -> <k> sq0 @ k @ 1
+                          ,(i=1) -> <k> sq1 @ k @ 1] (g b)
+  in <i> (sq2 @ i @ 0
+         ,<j> hcom 0->1 B [(i=0) -> fg (p0 @ j)
+                          ,(i=1) -> fg (p1 @ j)
+                          ,(j=0) -> fg (f (sq2 @ i @ 0))
+                          ,(j=1) -> fg b]
+                          (f (hcom 1->0 A [(i=0) -> sq0 @ j
+                                          ,(i=1) -> sq1 @ j
+                                          ,(j=0) -> gf (sq2 @ i @ 0)
                                           ,(j=1) -> <_> g b]
                                           (sq2 @ i @ j))))
 
